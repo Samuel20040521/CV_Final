@@ -1,0 +1,12 @@
+[project]
+name = "stereo-matching"
+version = "0.1.0"
+description = "NTU CV 2026 final project — Middlebury stereo matching pipeline"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "opencv-contrib-python",
+    "pandas",
+    "tqdm",
+    "psutil",
+]
