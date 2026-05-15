@@ -50,3 +50,51 @@ from the `stereo_matching` package. This keeps the assignment's import contract 
 while allowing the algorithm to live in proper submodules.
 
 The package is flat (no `src/`) so `python eval.py` works without an install step.
+
+## Bonus track — real-world stereo on KITTI raw
+
+The `bonus/` package builds an end-to-end depth pipeline on real driving footage
+and produces a flythrough video of the reconstructed scene. It reuses
+`stereo_matching.computeDisp` unchanged, so it cannot affect the main 80% score.
+
+Install bonus deps (open3d, imageio, scipy):
+
+```bash
+uv sync --extra bonus
+```
+
+Download a small KITTI raw drive (~60 MB):
+
+```bash
+uv run python -m bonus.download_sample --root data/kitti_raw
+```
+
+Run the full pipeline on the first 100 frames at stride 2:
+
+```bash
+uv run python -m bonus.run_bonus \
+    --kitti-root data/kitti_raw \
+    --date 2011_09_26 --drive 0005 \
+    --start 0 --end 100 --stride 2 \
+    --max-disp 96 \
+    --rectify scratch \
+    --out out/bonus_demo.mp4
+```
+
+`--rectify scratch` uses the from-scratch rectification (textbook decomposition
+of R, T into rectification homographies, then `cv2.remap`). `--rectify kitti`
+uses the rectification rotations KITTI publishes, which is the ground truth and
+the more practical choice for the demo — switch between them for the report.
+
+Bonus layout:
+
+```
+bonus/
+├── kitti.py            KITTI raw loader (calibration + OXTS poses)
+├── rectify.py          calibrated stereo rectification from first principles
+├── depth.py            disparity → metric depth → colored point cloud
+├── fusion.py           Open3D ScalableTSDFVolume multi-frame integration
+├── render.py           offscreen orbit flythrough → mp4 (imageio + ffmpeg)
+├── run_bonus.py        end-to-end CLI
+└── download_sample.py  fetch a small KITTI raw drive for testing
+```

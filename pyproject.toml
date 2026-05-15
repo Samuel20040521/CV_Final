@@ -10,3 +10,10 @@ dependencies = [
     "tqdm",
     "psutil",
 ]
+
+[project.optional-dependencies]
+bonus = [
+    "open3d",
+    "imageio[ffmpeg]",
+    "scipy",
+]
