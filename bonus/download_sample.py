@@ -15,10 +15,11 @@ After this completes, run:
 from __future__ import annotations
 
 import argparse
-import shutil
 import urllib.request
 import zipfile
 from pathlib import Path
+
+from tqdm import tqdm
 
 CALIB_URL = "https://s3.eu-central-1.amazonaws.com/avg-kitti/raw_data/2011_09_26_calib.zip"
 DRIVE_URL_TPL = (
@@ -28,13 +29,47 @@ DRIVE_URL_TPL = (
 
 
 def _download(url: str, dest: Path) -> None:
+    """Stream `url` to `dest` with a tqdm progress bar.
+
+    KITTI's S3 mirror is slow (often <200 KB/s), so silent downloads look stuck.
+    Resumes by checking the existing local size against Content-Length.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
-        print(f"[skip] already downloaded: {dest.name}")
-        return
+        # Verify completeness via HEAD; if it matches Content-Length, skip.
+        try:
+            req = urllib.request.Request(url, method="HEAD")
+            with urllib.request.urlopen(req) as r:
+                expected = int(r.headers.get("Content-Length", "0"))
+            if expected and dest.stat().st_size == expected:
+                print(f"[skip] already downloaded: {dest.name} ({expected} bytes)")
+                return
+            print(f"[resume] {dest.name}: have {dest.stat().st_size}/{expected} bytes")
+        except Exception as e:
+            print(f"[warn] HEAD check failed ({e}); re-downloading {dest.name}")
+
     print(f"[get] {url}")
-    with urllib.request.urlopen(url) as resp, open(dest, "wb") as fp:
-        shutil.copyfileobj(resp, fp)
+    headers = {}
+    mode = "wb"
+    start = 0
+    if dest.exists():
+        start = dest.stat().st_size
+        headers["Range"] = f"bytes={start}-"
+        mode = "ab"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req) as resp:
+        total = int(resp.headers.get("Content-Length", "0")) + start
+        chunk = 64 * 1024
+        with open(dest, mode) as fp, tqdm(
+            total=total, initial=start, unit="B", unit_scale=True, unit_divisor=1024,
+            desc=dest.name,
+        ) as bar:
+            while True:
+                buf = resp.read(chunk)
+                if not buf:
+                    break
+                fp.write(buf)
+                bar.update(len(buf))
 
 
 def _unzip(zip_path: Path, target: Path) -> None:

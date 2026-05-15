@@ -184,6 +184,32 @@ def rectification_from_kitti(calib) -> StereoRectification:
     )
 
 
+def passthrough_rectification(calib) -> StereoRectification:
+    """For already-rectified input (KITTI sync drives): identity remap at S_rect.
+
+    The KITTI sync drives ship images that are already rectified using the same
+    R_rect / P_rect we'd derive ourselves. In that case there's nothing left to
+    warp — we just pass the image through and use P_rect's top-left 3x3 as the
+    rectified intrinsic. This lets the bonus run end-to-end on sync drives
+    without needing the bigger _extract archives.
+    """
+    W, H = calib.S_rect_L
+    fx_new = calib.P_L_rect[0, 0]
+    fy_new = calib.P_L_rect[1, 1]
+    cx_new = calib.P_L_rect[0, 2]
+    cy_new = calib.P_L_rect[1, 2]
+    K_new = np.array([[fx_new, 0, cx_new], [0, fy_new, cy_new], [0, 0, 1]], dtype=np.float64)
+
+    u, v = np.meshgrid(np.arange(W), np.arange(H))
+    map_x = u.astype(np.float32)
+    map_y = v.astype(np.float32)
+    baseline = float(np.linalg.norm(calib.T_LR))
+    return StereoRectification(
+        map_Lx=map_x, map_Ly=map_y, map_Rx=map_x.copy(), map_Ry=map_y.copy(),
+        K_rect_L=K_new, K_rect_R=K_new, baseline=baseline, out_size=(W, H),
+    )
+
+
 def apply(img_L: np.ndarray, img_R: np.ndarray, rect: StereoRectification) -> tuple[np.ndarray, np.ndarray]:
     """Warp raw stereo images through the precomputed remap LUTs."""
     rL = cv2.remap(img_L, rect.map_Lx, rect.map_Ly, interpolation=cv2.INTER_LINEAR,

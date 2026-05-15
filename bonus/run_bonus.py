@@ -42,9 +42,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--stride", type=int, default=1)
     p.add_argument("--max-disp", type=int, default=96,
                    help="max disparity search range (KITTI baseline is ~0.54m so 96 covers ~1.5m near)")
-    p.add_argument("--rectify", choices=["kitti", "scratch"], default="kitti",
-                   help="kitti: use published R_rect/P_rect (matches their ground truth). "
-                        "scratch: compute rectification ourselves for the report demo.")
+    p.add_argument("--rectify", choices=["auto", "kitti", "scratch", "passthrough"], default="auto",
+                   help="auto: detect from first frame size (sync drives are already rectified, "
+                        "extract drives are not). kitti: use published R_rect/P_rect on raw input. "
+                        "scratch: from-scratch rectification on raw input. passthrough: skip remap "
+                        "(input already rectified).")
     p.add_argument("--out", required=True, type=Path, help="output mp4 path")
     p.add_argument("--voxel", type=float, default=0.08, help="TSDF voxel size in metres")
     p.add_argument("--orbit-radius", type=float, default=25.0)
@@ -75,8 +77,31 @@ def main() -> None:
     T_imu_to_cam = kitti.load_imu_to_cam(date_dir)
     T_cam_to_imu = np.linalg.inv(T_imu_to_cam)
 
-    print(f"[setup] building rectification ({args.rectify})")
-    if args.rectify == "kitti":
+    # Detect input image dimensions to pick the right rectification mode.
+    probe_L, _ = pairs[args.start]
+    probe_img = cv2.imread(str(probe_L))
+    probe_h, probe_w = probe_img.shape[:2]
+    is_rectified = (probe_w, probe_h) == calib.S_rect_L
+    print(f"[setup] input frame size {probe_w}x{probe_h}  "
+          f"(unrectified={calib.S_L}, rectified={calib.S_rect_L}) → "
+          f"{'pre-rectified' if is_rectified else 'raw'}")
+
+    mode = args.rectify
+    if mode == "auto":
+        mode = "passthrough" if is_rectified else "kitti"
+        print(f"[setup] --rectify auto → {mode}")
+    elif mode in ("kitti", "scratch") and is_rectified:
+        print(f"[warn] --rectify {mode} requested but input is already rectified; "
+              f"falling back to passthrough to avoid double-rectifying")
+        mode = "passthrough"
+    elif mode == "passthrough" and not is_rectified:
+        raise SystemExit("--rectify passthrough requires already-rectified input "
+                         f"(got {probe_w}x{probe_h}, expected {calib.S_rect_L})")
+
+    print(f"[setup] building rectification ({mode})")
+    if mode == "passthrough":
+        rect = rect_mod.passthrough_rectification(calib)
+    elif mode == "kitti":
         rect = rect_mod.rectification_from_kitti(calib)
     else:
         # From-scratch path: feed it the raw intrinsics and the relative pose

@@ -41,8 +41,10 @@ class CamCalib:
     K_R_unrect: np.ndarray   # (3, 3) intrinsics of right color cam pre-rect
     D_L: np.ndarray          # (5,)   left distortion
     D_R: np.ndarray          # (5,)   right distortion
-    S_L: tuple[int, int]     # (width, height) of left image
+    S_L: tuple[int, int]     # (width, height) of left unrectified image
     S_R: tuple[int, int]
+    S_rect_L: tuple[int, int]  # (width, height) of left rectified image
+    S_rect_R: tuple[int, int]
     R_L: np.ndarray          # (3, 3) rotation from left cam to its rect frame
     R_R: np.ndarray
     P_L_rect: np.ndarray     # (3, 4) projection matrix into rect left frame
@@ -52,13 +54,17 @@ class CamCalib:
 
 
 def _parse_calib_file(path: Path) -> dict[str, np.ndarray]:
+    """Parse a KITTI calib file. Skips non-numeric entries (e.g. `calib_time:`)."""
     out: dict[str, np.ndarray] = {}
     for line in path.read_text().splitlines():
         if ":" not in line:
             continue
         key, _, rest = line.partition(":")
         key = key.strip()
-        nums = [float(x) for x in rest.split()]
+        try:
+            nums = [float(x) for x in rest.split()]
+        except ValueError:
+            continue
         if not nums:
             continue
         out[key] = np.asarray(nums, dtype=np.float64)
@@ -74,6 +80,10 @@ def load_calibration(date_dir: Path) -> CamCalib:
 
     def S(idx: str) -> tuple[int, int]:
         w, h = raw[f"S_{idx}"]
+        return int(w), int(h)
+
+    def Srect(idx: str) -> tuple[int, int]:
+        w, h = raw[f"S_rect_{idx}"]
         return int(w), int(h)
 
     def Rrect(idx: str) -> np.ndarray:
@@ -96,6 +106,8 @@ def load_calibration(date_dir: Path) -> CamCalib:
         D_R=raw["D_03"],
         S_L=S("02"),
         S_R=S("03"),
+        S_rect_L=Srect("02"),
+        S_rect_R=Srect("03"),
         R_L=Rrect("02"),
         R_R=Rrect("03"),
         P_L_rect=P2,

@@ -24,9 +24,13 @@ import open3d as o3d
 
 @dataclass
 class TSDFConfig:
-    voxel_size: float = 0.08          # metres
-    sdf_trunc: float = 0.32           # 4x voxel_size, a common rule
-    depth_trunc: float = 50.0         # m, drop samples beyond this
+    voxel_size: float = 0.12          # metres — coarser is more noise-tolerant
+                                      # for outdoor stereo and forward driving
+    sdf_trunc: float = 0.48           # 4x voxel_size, a common rule
+    depth_trunc: float = 25.0         # m, drop samples beyond this. Stereo
+                                      # depth uncertainty grows as Z²/(fB) so
+                                      # 25m is roughly where KITTI stereo stays
+                                      # consistent across consecutive frames.
     depth_scale: float = 1000.0       # depth values in millimetres for Open3D
     color_type: o3d.pipelines.integration.TSDFVolumeColorType = (
         o3d.pipelines.integration.TSDFVolumeColorType.RGB8
@@ -53,7 +57,10 @@ def integrate_frame(
     H, W = depth_metres.shape
     color_rgb = color_bgr[..., ::-1]
     color_o3d = o3d.geometry.Image(np.ascontiguousarray(color_rgb))
-    depth_mm = (depth_metres * cfg.depth_scale).astype(np.uint16)
+    # Clip BEFORE casting to uint16: depths beyond uint16 max (65.5 m at
+    # depth_scale=1000) would wrap around and inject phantom close-up geometry.
+    depth_clipped = np.clip(depth_metres, 0.0, cfg.depth_trunc)
+    depth_mm = (depth_clipped * cfg.depth_scale).astype(np.uint16)
     depth_o3d = o3d.geometry.Image(depth_mm)
 
     rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(

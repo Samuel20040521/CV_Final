@@ -12,6 +12,10 @@ __pycache__/
 /Teddy.png
 /Cones.png
 
+# Bonus pipeline outputs and downloads (not artifacts to track)
+/data/
+/out/
+
 # OS / editor
 .DS_Store
 .vscode/
