@@ -1,0 +1,244 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Frame Generation Team",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          218.84375,
+          83.01422119140625
+        ],
+        [
+          375.13372802734375,
+          83.01422119140625
+        ],
+        [
+          375.13372802734375,
+          98.97418212890625
+        ],
+        [
+          218.84375,
+          98.97418212890625
+        ]
+      ]
+    },
+    {
+      "title": "\u4e00\u3001\u4f5c\u696d\u898f\u7bc4:",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          90.02399444580078,
+          110.5947265625
+        ],
+        [
+          174.01998901367188,
+          110.5947265625
+        ],
+        [
+          174.01998901367188,
+          123.0880126953125
+        ],
+        [
+          90.02399444580078,
+          123.0880126953125
+        ]
+      ]
+    },
+    {
+      "title": "\u4e8c\u3001\u7e73\u4ea4\u4f5c\u696d\u683c\u5f0f\u898f\u7bc4:",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          89.6328125,
+          416.06640625
+        ],
+        [
+          222.0500030517578,
+          416.06640625
+        ],
+        [
+          222.0500030517578,
+          429.11798095703125
+        ],
+        [
+          89.6328125,
+          429.11798095703125
+        ]
+      ]
+    },
+    {
+      "title": "Stereo Matching Team",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          224.373046875,
+          83.01422119140625
+        ],
+        [
+          370.2137145996094,
+          83.01422119140625
+        ],
+        [
+          370.2137145996094,
+          98.97418212890625
+        ],
+        [
+          224.373046875,
+          98.97418212890625
+        ]
+      ]
+    },
+    {
+      "title": "\u4e00\u3001\u4f5c\u696d\u898f\u7bc4:",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          90.02399444580078,
+          110.5947265625
+        ],
+        [
+          174.02398681640625,
+          110.5947265625
+        ],
+        [
+          174.02398681640625,
+          123.0880126953125
+        ],
+        [
+          90.02399444580078,
+          123.0880126953125
+        ]
+      ]
+    },
+    {
+      "title": "\u4e8c\u3001\u7e73\u4ea4\u4f5c\u696d\u683c\u5f0f\u898f\u7bc4:",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          89.341796875,
+          344.9404296875
+        ],
+        [
+          222.02398681640625,
+          344.9404296875
+        ],
+        [
+          222.02398681640625,
+          357.11798095703125
+        ],
+        [
+          89.341796875,
+          357.11798095703125
+        ]
+      ]
+    },
+    {
+      "title": "fushengyu@media.ee.ntu.edu.tw",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          90.02399444580078,
+          381.1201171875
+        ],
+        [
+          247.68002319335938,
+          381.1201171875
+        ],
+        [
+          247.68002319335938,
+          393.7914733886719
+        ],
+        [
+          90.02399444580078,
+          393.7914733886719
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          170
+        ],
+        [
+          "Line",
+          30
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "ListItem",
+          4
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "ListGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          125
+        ],
+        [
+          "Line",
+          24
+        ],
+        [
+          "ListItem",
+          6
+        ],
+        [
+          "SectionHeader",
+          4
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "ListGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/CV_Final_Project_Rules"
+}
