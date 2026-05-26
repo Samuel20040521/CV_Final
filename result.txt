@@ -1,16 +1,16 @@
 === Tsukuba ===
 Processing image Tsukuba ...
-[Time] 0.2658 sec
-[Bad Pixel Ratio] 4.50%
+[Time] 0.1805 sec
+[Bad Pixel Ratio] 3.81%
 === Venus ===
 Processing image Venus ...
-[Time] 0.4382 sec
-[Bad Pixel Ratio] 0.53%
+[Time] 0.2662 sec
+[Bad Pixel Ratio] 0.41%
 === Teddy ===
 Processing image Teddy ...
-[Time] 1.0978 sec
-[Bad Pixel Ratio] 10.97%
+[Time] 0.4676 sec
+[Bad Pixel Ratio] 9.79%
 === Cones ===
 Processing image Cones ...
-[Time] 1.1245 sec
-[Bad Pixel Ratio] 10.73%
+[Time] 0.4800 sec
+[Bad Pixel Ratio] 9.20%

@@ -4,13 +4,14 @@ Submission: B11202015
 == Local evaluation results (4 Middlebury v2 images) ==
 
 Image      Bad Pixel Ratio   Threshold   Margin       Time
-Tsukuba    4.50%             < 8%        +3.50 pp     0.27 s
-Venus      0.53%             < 5%        +4.47 pp     0.44 s
-Teddy     10.97%             <18%        +7.03 pp     1.10 s
-Cones     10.73%             <15%        +4.27 pp     1.12 s
-Average    6.68%
+Tsukuba    3.81%             < 8%        +4.19 pp     0.17 s
+Venus      0.41%             < 5%        +4.59 pp     0.27 s
+Teddy      9.79%             <18%        +8.21 pp     0.45 s
+Cones      9.20%             <15%        +5.80 pp     0.48 s
+Average    5.80%
 
-All four images pass their thresholds well within the 10-minute time limit.
+3-image Codalab-style score (Tsukuba * Venus * Teddy * sum_time):
+  3.81 * 0.41 * 9.79 * 0.89 ≈ 13.6   (local)
 
 == Environment ==
 
@@ -26,16 +27,26 @@ Run:
 
 == Algorithm summary ==
 
-Single-file implementation in computeDisp.py. Standard Middlebury 4-step pipeline:
+Single-file implementation in computeDisp.py. Standard Middlebury 4-step
+pipeline with two speedups and one quality refinement:
 
-1. Cost computation:   9x7 Census transform + Hamming distance,
-                       both L->R and R->L cost volumes.
-2. Cost aggregation:   per-disparity-slice guided filter
-                       (radius=7, eps=1e-3), color-image guide.
-3. Optimization:       per-pixel winner-take-all (argmin over disparity).
-4. Refinement:         left-right consistency (threshold=1) ->
-                       scanline hole fill (left/right min, max_disp pad) ->
-                       weighted median filter (radius=15).
+1. Cost computation:   9x7 Census transform + Hamming distance.
+                       Uses numpy.bitwise_count (numpy >= 2.0, ~15x faster than
+                       the per-byte popcount LUT path; LUT fallback retained).
+2. R-direction cost:   Reindex from the L cost volume — cost_R[d,y,x] =
+                       cost_L[d,y,x+d] with column clamp. Skips an entire
+                       Hamming pass (~30% time saving).
+3. Cost aggregation:   Per-disparity-slice guided filter
+                       (radius=7, eps=1e-2), BGR image as guide.
+4. Optimization:       Per-pixel winner-take-all (argmin over disparity).
+5. Refinement:
+   a. Left-right consistency check (threshold = 1).
+   b. Scanline hole fill: min(nearest-valid-left, nearest-valid-right),
+      max_disp padding at boundary.
+   c. Parabolic sub-pixel disparity from the 3 cost samples around argmin.
+   d. Weighted median filter (radius=15) in scaled uint8 space — disparity is
+      stretched to [0, 255] before WMF so the median has sub-pixel granularity;
+      scaled back and rounded after.
 
 Allowed cv2.ximgproc primitives used: createGuidedFilter, weightedMedianFilter.
 Does NOT use cv2.StereoBM, cv2.StereoSGBM, or any other built-in stereo solver.
