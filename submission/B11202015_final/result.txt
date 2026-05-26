@@ -1,0 +1,42 @@
+NTU CV Spring 2026 Final Project — Stereo Matching
+Submission: B11202015
+
+== Local evaluation results (4 Middlebury v2 images) ==
+
+Image      Bad Pixel Ratio   Threshold   Margin       Time
+Tsukuba    4.50%             < 8%        +3.50 pp     0.27 s
+Venus      0.53%             < 5%        +4.47 pp     0.44 s
+Teddy     10.97%             <18%        +7.03 pp     1.10 s
+Cones     10.73%             <15%        +4.27 pp     1.12 s
+Average    6.68%
+
+All four images pass their thresholds well within the 10-minute time limit.
+
+== Environment ==
+
+Python 3.8+ (developed and tested locally on 3.11)
+Packages (requirement.txt): numpy, opencv-contrib-python, pandas, tqdm, psutil
+
+Setup:
+    pip3 install -r requirement.txt
+
+Run:
+    python3 main.py --image Teddy       # produces Teddy.png
+    python3 eval.py --image Teddy       # prints Bad Pixel Ratio
+
+== Algorithm summary ==
+
+Single-file implementation in computeDisp.py. Standard Middlebury 4-step pipeline:
+
+1. Cost computation:   9x7 Census transform + Hamming distance,
+                       both L->R and R->L cost volumes.
+2. Cost aggregation:   per-disparity-slice guided filter
+                       (radius=7, eps=1e-3), color-image guide.
+3. Optimization:       per-pixel winner-take-all (argmin over disparity).
+4. Refinement:         left-right consistency (threshold=1) ->
+                       scanline hole fill (left/right min, max_disp pad) ->
+                       weighted median filter (radius=15).
+
+Allowed cv2.ximgproc primitives used: createGuidedFilter, weightedMedianFilter.
+Does NOT use cv2.StereoBM, cv2.StereoSGBM, or any other built-in stereo solver.
+No deep-learning components. No custom C extensions.

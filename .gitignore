@@ -12,6 +12,18 @@ __pycache__/
 /Teddy.png
 /Cones.png
 
+# Test data downloadable via scripts/fetch_testdata.py (Middlebury public archives)
+/testdata/Tsukuba/
+/testdata/Venus/
+/testdata/Cones/
+
+# TA starter archives (not our work)
+/Stereo_Matching.zip
+
+# Bonus pipeline outputs and downloads (Teng branch only)
+/data/
+/out/
+
 # OS / editor
 .DS_Store
 .vscode/
