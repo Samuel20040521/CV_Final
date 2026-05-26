@@ -11,7 +11,7 @@ checking whether time optimisations transferred.
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | 2026-05-26 | `de508b6` | **72.67** | 4.50 | 0.54 | 10.84 | 2.76 s | ~48 (1.84 s) | 1.50× |
 | 2026-05-26 | `c7fdd04` | **50.30** | 3.81 | 0.41 | 9.72 | 3.34 s | ~14 (0.89 s) | 3.75× |
-| 2026-05-26 | (pending) | _projected 13–35_ | 3.21 | 0.34 | 10.85 | _0.75 s local_ | ~8.9 (0.75 s) | — |
+| 2026-05-26 | (pending v4) | _projected 14–22_ | 3.07 | 0.34 | 10.25 | _0.86 s codalab-env_ | ~9.2 (0.86 s) | — |
 
 ## Per-submission notes
 
@@ -20,7 +20,24 @@ checking whether time optimisations transferred.
 - LUT-based popcount, single-direction Hamming reused for both L/R via full re-computation
 - Placed last
 
-### v3 — (pending upload)
+### v4 — (pending upload)
+- Verified Codalab environment via a fresh Python 3.8 + `pip install -r
+  requirement.txt` venv: **numpy 1.24.4 + opencv 4.13** — confirms numpy lacks
+  `bitwise_count`, so the SWAR fallback added in v3 is the real production
+  path on the grader.
+- Re-ran sweep with the grader-equivalent environment as the timing baseline.
+  Top config: `gf_radius=7, gf_eps=1e-2, wmf_radius=15`.
+- Dropped the [0, 255] disparity stretch around `weightedMedianFilter`.
+  Sub-pixel float is cast directly to uint8 — saves a few numpy allocations
+  per call and (surprisingly) reduces BPR. The implicit floor of negative
+  parabolic deltas acts as a tie-breaker that helps the median.
+- BPR vs v3 (codalab-env measurement): Tsukuba 3.21→3.07, Venus 0.34=0.34,
+  Teddy 10.85→10.25, Cones 9.30→8.97.
+- Local-codalab-env 3-image product: ~9.2 (vs v3's ~10.5). The simpler WMF
+  call should also bring the Codalab time inflation closer to v1's 1.45×
+  ratio (vs v2's 2.40× ratio) — the scaled WMF was the suspected cause.
+
+### v3 — `e5c0bcf` (not uploaded; superseded by v4)
 - SWAR popcount fallback replaces the byte-LUT path for numpy < 2.0
   (the suspected Codalab fallback). Local benchmark: 87 ms vs 301 ms for the
   Teddy Hamming pass — 3.5× faster than LUT, only 80 ms slower than

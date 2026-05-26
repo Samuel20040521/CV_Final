@@ -3,19 +3,21 @@ Submission: B11202015
 
 == Local evaluation results (4 Middlebury v2 images) ==
 
-Image      Bad Pixel Ratio   Threshold   Margin       Time
-Tsukuba    3.21%             < 8%        +4.79 pp     0.15 s
-Venus      0.34%             < 5%        +4.66 pp     0.22 s
-Teddy     10.85%             <18%        +7.15 pp     0.38 s
-Cones      9.30%             <15%        +5.70 pp     0.37 s
-Average    5.93%
+Codalab-equivalent environment (Python 3.8 + numpy 1.24.4 + opencv 4.13):
 
-3-image local product (Tsukuba * Venus * Teddy * sum_time):
-  3.21 * 0.34 * 10.85 * 0.75 ≈ 8.9   (local)
+Image      Bad Pixel Ratio   Threshold   Margin       Time
+Tsukuba    3.07%             < 8%        +4.93 pp     0.15 s
+Venus      0.34%             < 5%        +4.66 pp     0.26 s
+Teddy     10.25%             <18%        +7.75 pp     0.46 s
+Cones      8.97%             <15%        +6.03 pp     0.47 s
+Average    5.66%
+
+3-image local-Codalab-env product score:
+  3.07 × 0.34 × 10.25 × 0.86 ≈ 9.2
 
 == Environment ==
 
-Python 3.8+ (developed and tested locally on 3.11)
+Python 3.8+ (developed and tested locally on 3.11 and 3.8)
 Packages (requirement.txt): numpy, opencv-contrib-python, pandas, tqdm, psutil
 
 Setup:
@@ -34,24 +36,25 @@ pipeline with the following design choices:
                        Popcount uses numpy.bitwise_count (numpy >= 2.0) when
                        available, otherwise falls back to a vectorised SWAR
                        (SIMD-Within-A-Register) implementation that runs
-                       ~3.5x faster than the per-byte lookup table on Teddy.
+                       ~3.5x faster than the per-byte lookup table.
 2. R-direction cost:   Built from cost_L via column reindex —
                        cost_R[d,y,x] = cost_L[d,y,x+d] with column clamp.
                        Skips an entire Hamming pass.
-3. Cost aggregation:   Guided filter on the L cost only (radius=5, eps=3e-2,
-                       BGR guide). The R cost is left un-aggregated and feeds
-                       directly into the LR consistency check — measurably
-                       better on small-disparity images, only modestly worse
-                       on Teddy/Cones, and saves an entire filter pass.
+3. Cost aggregation:   Guided filter on the L cost only (radius=7, eps=1e-2,
+                       BGR guide). The R cost feeds directly into the LR
+                       consistency check un-aggregated — measurably better on
+                       small-disparity images, only modestly worse on
+                       Teddy/Cones, saves an entire filter pass.
 4. Optimization:       Per-pixel winner-take-all (argmin over disparity).
 5. Refinement:
    a. Left-right consistency check (threshold = 1).
    b. Scanline hole fill: min(nearest-valid-left, nearest-valid-right),
       max_disp padding at boundary.
    c. Parabolic sub-pixel disparity around the WTA argmin.
-   d. Weighted median filter (radius=15) in scaled uint8 space — disparity
-      stretched to [0, 255] before WMF so the median has sub-pixel
-      granularity; scaled back and rounded after.
+   d. Weighted median filter (radius=15). Sub-pixel float is cast directly
+      to uint8 (max_disp ≤ 255), trading the previous [0, 255] stretch for
+      a one-step cast — the implicit floor of small negative parabolic
+      deltas acts as a helpful tie-breaker in the median window.
 
 Allowed cv2.ximgproc primitives used: createGuidedFilter, weightedMedianFilter.
 Does NOT use cv2.StereoBM, cv2.StereoSGBM, or any other built-in stereo solver.

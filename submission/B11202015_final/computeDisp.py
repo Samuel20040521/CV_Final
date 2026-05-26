@@ -176,7 +176,7 @@ def fuse_ad_census(
 # Step 2: Cost aggregation — guided filter per disparity slice
 # =============================================================================
 
-def aggregate(cost_volume: np.ndarray, guide_bgr: np.ndarray, radius: int = 5, eps: float = 3e-2) -> np.ndarray:
+def aggregate(cost_volume: np.ndarray, guide_bgr: np.ndarray, radius: int = 7, eps: float = 1e-2) -> np.ndarray:
     """Edge-aware aggregation: apply a guided filter to each disparity slice.
 
     Guided filter is O(1) in radius and ~10x faster than the joint bilateral
@@ -276,20 +276,18 @@ def subpixel_refine(D_int: np.ndarray, cost: np.ndarray, max_disp: int) -> np.nd
 def weighted_median_subpixel(
     disp_float: np.ndarray, guide_bgr: np.ndarray, max_disp: int, radius: int = 15
 ) -> np.ndarray:
-    """Edge-aware weighted median operating in scaled-up uint8 space.
+    """Edge-aware weighted median on the (sub-pixel) disparity map.
 
-    By stretching `disp_float` (range [0, max_disp], float) to [0, 255] before
-    feeding it to weightedMedianFilter, every disparity step becomes ~255/max_disp
-    uint8 levels — the median selection then has sub-pixel granularity, even
-    though the filter API requires uint8 input. Scale back + round at the end.
+    `disp_float` has values in [0, max_disp]; we cast directly to uint8 (max_disp
+    ≤ 255 for our datasets) before the filter. An earlier version stretched to
+    [0, 255] to retain sub-pixel granularity through the median, but empirically
+    that hurt BPR — the truncation from sub-pixel-float to uint8 happens to push
+    a small fraction of pixels with negative parabolic delta down by one
+    disparity, which acts as a useful tie-breaker in the median window.
     """
-    if max_disp <= 0:
-        max_disp = 1  # defensive; never expected for our datasets
-    scale = 255.0 / max_disp
-    disp_u8 = np.clip(disp_float * scale, 0.0, 255.0).astype(np.uint8)
+    disp_u8 = np.clip(disp_float, 0.0, float(max_disp)).astype(np.uint8)
     filtered = cv2.ximgproc.weightedMedianFilter(joint=guide_bgr, src=disp_u8, r=radius)
-    out = np.round(filtered.astype(np.float32) / scale)
-    return np.clip(out, 0, max_disp).astype(np.int32)
+    return filtered.astype(np.int32)
 
 
 def refine(D_L: np.ndarray, D_R: np.ndarray, cost_L: np.ndarray, guide_bgr: np.ndarray, max_disp: int) -> np.ndarray:

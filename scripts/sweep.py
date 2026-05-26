@@ -43,11 +43,12 @@ def run_pipeline(
     alpha: float, lam_c: float, lam_ad: float,
     subpixel: bool,
     agg_R: bool = False,
+    census_window: Tuple[int, int] = (9, 7),
 ) -> np.ndarray:
     gray_L = cv2.cvtColor(Il, cv2.COLOR_BGR2GRAY)
     gray_R = cv2.cvtColor(Ir, cv2.COLOR_BGR2GRAY)
-    census_L = cd.census_transform(gray_L)
-    census_R = cd.census_transform(gray_R)
+    census_L = cd.census_transform(gray_L, window=census_window)
+    census_R = cd.census_transform(gray_R, window=census_window)
     c_census = cd.hamming_cost_volume(census_L, census_R, max_disp)
     if alpha > 0:
         c_ad = cd.ad_cost_volume(Il, Ir, max_disp)
@@ -102,6 +103,7 @@ def run_config(cfg: Dict, datasets: Iterable[str]) -> Dict[str, Dict[str, float]
             alpha=cfg["alpha"], lam_c=cfg["lam_c"], lam_ad=cfg["lam_ad"],
             subpixel=cfg["subpixel"],
             agg_R=cfg.get("agg_R", False),
+            census_window=cfg.get("census_window", (9, 7)),
         )
         dt = time.time() - t0
         bpr = evaluate_bpr(pred, gt, scale) * 100
@@ -132,9 +134,9 @@ def fmt_row(name: str, r: Dict[str, float]) -> str:
 
 def fmt_cfg(cfg: Dict) -> str:
     sub = "sub" if cfg["subpixel"] else "INT"
-    return (f"α={cfg['alpha']:.1f} λc={cfg['lam_c']:.1f} λad={cfg['lam_ad']:.2f} "
-            f"gf_r={cfg['gf_r']} gf_eps={cfg['gf_eps']:.0e} "
-            f"wmf_r={cfg['wmf_r']} lrc={cfg['lrc']} {sub}")
+    cw = cfg.get("census_window", (9, 7))
+    return (f"cw={cw[0]}x{cw[1]} gf_r={cfg['gf_r']} gf_eps={cfg['gf_eps']:.0e} "
+            f"wmf_r={cfg['wmf_r']} {sub}")
 
 
 def sweep(configs: List[Dict], datasets: Iterable[str]) -> List[Tuple[Dict, Dict, float, float, bool]]:
@@ -154,9 +156,9 @@ def sweep(configs: List[Dict], datasets: Iterable[str]) -> List[Tuple[Dict, Dict
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", default="quick",
-                        choices=["quick", "full", "alpha", "wmf", "tune_a0", "v3"],
+                        choices=["quick", "full", "alpha", "wmf", "tune_a0", "v3", "v4"],
                         help="quick: small grid; full: full grid; alpha/wmf: just one axis; "
-                             "tune_a0: gf×wmf with α=0; v3: tune the no-R-aggregation pipeline")
+                             "tune_a0: gf×wmf with α=0; v3: tune no-R-agg; v4: codalab-env census×gf×wmf")
     args = parser.parse_args()
 
     datasets = list(CONFIG.keys())
@@ -207,6 +209,17 @@ def main() -> None:
             [5, 7, 9], [3e-3, 1e-2, 3e-2, 1e-1], [11, 13, 15, 17, 19]
         ):
             configs.append({**v3, "gf_r": gf_r, "gf_eps": gf_eps, "wmf_r": wmf_r})
+    elif args.mode == "v4":
+        # Codalab-env focused sweep: add census window + smaller gf + wmf options
+        v4 = {**base, "alpha": 0.0, "subpixel": True, "agg_R": False}
+        for cw, gf_r, gf_eps, wmf_r in itertools.product(
+            [(9, 7), (7, 7), (5, 5)],
+            [3, 5, 7],
+            [1e-2, 3e-2],
+            [11, 13, 15],
+        ):
+            configs.append({**v4, "census_window": cw, "gf_r": gf_r,
+                            "gf_eps": gf_eps, "wmf_r": wmf_r})
 
     print(f"\n=== Sweep mode={args.mode}, {len(configs)} configs ===")
     rows = sweep(configs, datasets)
