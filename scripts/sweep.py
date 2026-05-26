@@ -42,6 +42,7 @@ def run_pipeline(
     lrc_thresh: int,
     alpha: float, lam_c: float, lam_ad: float,
     subpixel: bool,
+    agg_R: bool = False,
 ) -> np.ndarray:
     gray_L = cv2.cvtColor(Il, cv2.COLOR_BGR2GRAY)
     gray_R = cv2.cvtColor(Ir, cv2.COLOR_BGR2GRAY)
@@ -52,12 +53,12 @@ def run_pipeline(
         c_ad = cd.ad_cost_volume(Il, Ir, max_disp)
         cost_L = cd.fuse_ad_census(c_census, c_ad, lam_c=lam_c, lam_ad=lam_ad, alpha=alpha)
     else:
-        cost_L = c_census.astype(np.float32) / lam_c  # same normalization as fused
-    cost_R = cd.reindex_cost_to_right(cost_L)
+        cost_L = c_census.astype(np.float32) / lam_c
+    cost_R_raw = cd.reindex_cost_to_right(cost_L)
     cost_L_agg = cd.aggregate(cost_L, Il, radius=gf_radius, eps=gf_eps)
-    cost_R_agg = cd.aggregate(cost_R, Ir, radius=gf_radius, eps=gf_eps)
+    cost_R_used = cd.aggregate(cost_R_raw, Ir, radius=gf_radius, eps=gf_eps) if agg_R else cost_R_raw
     D_L = cd.winner_take_all(cost_L_agg)
-    D_R = cd.winner_take_all(cost_R_agg)
+    D_R = cd.winner_take_all(cost_R_used)
     valid = cd.lr_consistency(D_L, D_R, threshold=lrc_thresh)
     filled = cd.hole_fill(D_L, valid, max_disp).astype(np.float32)
     if subpixel:
@@ -100,6 +101,7 @@ def run_config(cfg: Dict, datasets: Iterable[str]) -> Dict[str, Dict[str, float]
             wmf_radius=cfg["wmf_r"], lrc_thresh=cfg["lrc"],
             alpha=cfg["alpha"], lam_c=cfg["lam_c"], lam_ad=cfg["lam_ad"],
             subpixel=cfg["subpixel"],
+            agg_R=cfg.get("agg_R", False),
         )
         dt = time.time() - t0
         bpr = evaluate_bpr(pred, gt, scale) * 100
@@ -152,15 +154,17 @@ def sweep(configs: List[Dict], datasets: Iterable[str]) -> List[Tuple[Dict, Dict
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", default="quick",
-                        choices=["quick", "full", "alpha", "wmf", "tune_a0"],
-                        help="quick: small grid; full: full grid; alpha/wmf: just one axis; tune_a0: gf×wmf with α=0")
+                        choices=["quick", "full", "alpha", "wmf", "tune_a0", "v3"],
+                        help="quick: small grid; full: full grid; alpha/wmf: just one axis; "
+                             "tune_a0: gf×wmf with α=0; v3: tune the no-R-aggregation pipeline")
     args = parser.parse_args()
 
     datasets = list(CONFIG.keys())
 
-    # Baseline (current production)
-    base = {"alpha": 0.5, "lam_c": 30.0, "lam_ad": 0.10,
-            "gf_r": 7, "gf_eps": 1e-3, "wmf_r": 15, "lrc": 1, "subpixel": True}
+    # Baseline (current production: α=0, no R-aggregation, sub-pixel + scaled WMF)
+    base = {"alpha": 0.0, "lam_c": 30.0, "lam_ad": 0.10,
+            "gf_r": 7, "gf_eps": 1e-2, "wmf_r": 15, "lrc": 1, "subpixel": True,
+            "agg_R": False}
     print("=" * 80)
     print("BASELINE (current production)")
     print("=" * 80)
@@ -196,6 +200,13 @@ def main() -> None:
             [5, 7, 9, 11], [1e-4, 1e-3, 1e-2], [9, 11, 13, 15, 17]
         ):
             configs.append({**a0, "gf_r": gf_r, "gf_eps": gf_eps, "wmf_r": wmf_r})
+    elif args.mode == "v3":
+        # No-R-aggregation pipeline — sweep gf radius/eps and WMF radius
+        v3 = {**base, "alpha": 0.0, "subpixel": True, "agg_R": False}
+        for gf_r, gf_eps, wmf_r in itertools.product(
+            [5, 7, 9], [3e-3, 1e-2, 3e-2, 1e-1], [11, 13, 15, 17, 19]
+        ):
+            configs.append({**v3, "gf_r": gf_r, "gf_eps": gf_eps, "wmf_r": wmf_r})
 
     print(f"\n=== Sweep mode={args.mode}, {len(configs)} configs ===")
     rows = sweep(configs, datasets)

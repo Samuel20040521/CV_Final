@@ -11,6 +11,7 @@ checking whether time optimisations transferred.
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | 2026-05-26 | `de508b6` | **72.67** | 4.50 | 0.54 | 10.84 | 2.76 s | ~48 (1.84 s) | 1.50× |
 | 2026-05-26 | `c7fdd04` | **50.30** | 3.81 | 0.41 | 9.72 | 3.34 s | ~14 (0.89 s) | 3.75× |
+| 2026-05-26 | (pending) | _projected 13–35_ | 3.21 | 0.34 | 10.85 | _0.75 s local_ | ~8.9 (0.75 s) | — |
 
 ## Per-submission notes
 
@@ -18,6 +19,21 @@ checking whether time optimisations transferred.
 - Pure Census + guided filter (radius=11, eps=1e-4) + integer WMF (radius=17)
 - LUT-based popcount, single-direction Hamming reused for both L/R via full re-computation
 - Placed last
+
+### v3 — (pending upload)
+- SWAR popcount fallback replaces the byte-LUT path for numpy < 2.0
+  (the suspected Codalab fallback). Local benchmark: 87 ms vs 301 ms for the
+  Teddy Hamming pass — 3.5× faster than LUT, only 80 ms slower than
+  `numpy.bitwise_count` (numpy ≥ 2.0).
+- Skip aggregating the R-direction cost volume. The un-aggregated cost feeds
+  the LR consistency mask directly. Outcome: Tsukuba/Venus BPR drops
+  (un-aggregated D_R is more selective at occlusion edges); Teddy/Cones BPR
+  rises modestly. 3-image BPR product drops 15.18 → 11.84.
+- Re-swept gf radius / eps / wmf radius for the new pipeline:
+  `gf_radius=5, gf_eps=3e-2, wmf_radius=15`.
+- Net local: 3-image product score 14 → 8.9 (37% local improvement vs v2).
+  Real Codalab score TBD; if the local→Codalab time ratio returns to ~1.5×
+  thanks to SWAR (vs v2's 3.75×), we expect Codalab Final around 13–20.
 
 ### v2 — `c7fdd04`
 - R→L cost via reindex (skip 2nd Hamming pass)
