@@ -12,6 +12,7 @@ checking whether time optimisations transferred.
 | 2026-05-26 | `de508b6` | **72.67** | 4.50 | 0.54 | 10.84 | 2.76 s | ~48 (1.84 s) | 1.50× |
 | 2026-05-26 | `c7fdd04` | **50.30** | 3.81 | 0.41 | 9.72 | 3.34 s | ~14 (0.89 s) | 3.75× |
 | 2026-05-26 | (pending v4) | _projected 14–22_ | 3.07 | 0.34 | 10.25 | _0.86 s codalab-env_ | ~9.2 (0.86 s) | — |
+| 2026-05-27 | (pending v5) | _projected 8.5–14_ | 3.07 | 0.36 | 10.22 | _0.52 s codalab-env_ | ~5.9 (0.52 s) | — |
 
 ## Per-submission notes
 
@@ -20,7 +21,27 @@ checking whether time optimisations transferred.
 - LUT-based popcount, single-direction Hamming reused for both L/R via full re-computation
 - Placed last
 
-### v4 — (pending upload)
+### v5 — (pending upload)
+- **Threading**: the per-disparity Hamming and guided-filter loops are now
+  driven by `concurrent.futures.ThreadPoolExecutor` (workers = min(cpu_count,
+  8)). numpy and cv2.ximgproc release the GIL during their C-level work, so
+  multi-core graders see near-linear speedup up to ~4 workers.
+- **R-aggregation tested and dropped (again)**: with threading making the
+  second filter pass cheap, R-aggregation was easy to add back. Tested in
+  codalab-env: brought Teddy/Cones down by ~1pp but pushed Tsukuba up from
+  3.07 → 4.13 and Venus from 0.36 → 0.40, net BPR product worse. Kept off.
+- Local-codalab-env 3-image time: 0.86 s → 0.52 s (-40%).
+- BPR essentially unchanged from v4: Tsukuba 3.07 / Venus 0.36 / Teddy 10.22.
+- Local-codalab-env 3-image score: 9.2 → **5.9**.
+- Codalab projection with threading should narrow the local→Codalab ratio
+  toward v1's 1.45× (vs v2/v3's likely 2.0–2.4×), since the extra Python-
+  level overhead that hurt v2 is gone. Pessimistic projection: ~14.
+  Optimistic projection: **8.5 — under 10**.
+- Inspiration: a classmate's `computeDisp_Tasi.py` (score 15.38) revealed
+  they used the same threading pattern. We weren't doing this; this is the
+  most important single missing piece.
+
+### v4 — `1008ddf`
 - Verified Codalab environment via a fresh Python 3.8 + `pip install -r
   requirement.txt` venv: **numpy 1.24.4 + opencv 4.13** — confirms numpy lacks
   `bitwise_count`, so the SWAR fallback added in v3 is the real production
