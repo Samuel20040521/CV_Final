@@ -51,6 +51,51 @@ SOURCES = {
         "gt_inside_zip": "disp2.png",
         "expected_scale": 4,
     },
+    # Middlebury 2001 extras — for anti-overfit generalisation testing.
+    # Standard 2001 naming: im2/im6 as the L/R pair, disp2.pgm as GT, scale 8.
+    "Sawtooth": {
+        "url": "https://vision.middlebury.edu/stereo/data/scenes2001/data/sawtooth/sawtooth.zip",
+        "left_inside_zip": "im2.ppm",
+        "right_inside_zip": "im6.ppm",
+        "gt_inside_zip": "disp2.pgm",
+        "expected_scale": 8,
+    },
+    "Bull": {
+        "url": "https://vision.middlebury.edu/stereo/data/scenes2001/data/bull/bull.zip",
+        "left_inside_zip": "im2.ppm",
+        "right_inside_zip": "im6.ppm",
+        "gt_inside_zip": "disp2.pgm",
+        "expected_scale": 8,
+    },
+    "Barn1": {
+        "url": "https://vision.middlebury.edu/stereo/data/scenes2001/data/barn1/barn1.zip",
+        "left_inside_zip": "im2.ppm",
+        "right_inside_zip": "im6.ppm",
+        "gt_inside_zip": "disp2.pgm",
+        "expected_scale": 8,
+    },
+    "Barn2": {
+        "url": "https://vision.middlebury.edu/stereo/data/scenes2001/data/barn2/barn2.zip",
+        "left_inside_zip": "im2.ppm",
+        "right_inside_zip": "im6.ppm",
+        "gt_inside_zip": "disp2.pgm",
+        "expected_scale": 8,
+    },
+    "Poster": {
+        "url": "https://vision.middlebury.edu/stereo/data/scenes2001/data/poster/poster.zip",
+        "left_inside_zip": "im2.ppm",
+        "right_inside_zip": "im6.ppm",
+        "gt_inside_zip": "disp2.pgm",
+        "expected_scale": 8,
+    },
+    # Map uses a 2-view layout (im0/im1, disp0.pgm).
+    "Map": {
+        "url": "https://vision.middlebury.edu/stereo/data/scenes2001/data/map/map.zip",
+        "left_inside_zip": "im0.pgm",
+        "right_inside_zip": "im1.pgm",
+        "gt_inside_zip": "disp0.pgm",
+        "expected_scale": 8,
+    },
 }
 
 

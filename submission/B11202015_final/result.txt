@@ -1,19 +1,21 @@
 NTU CV Spring 2026 Final Project — Stereo Matching
 Submission: B11202015
 
-== Local evaluation results (4 Middlebury v2 images) ==
+== Local evaluation results ==
 
 Codalab-equivalent environment (Python 3.8 + numpy 1.24.4 + opencv 4.13):
 
 Image      Bad Pixel Ratio   Threshold   Margin       Time
-Tsukuba    3.07%             < 8%        +4.93 pp     0.13 s
-Venus      0.36%             < 5%        +4.64 pp     0.15 s
-Teddy     10.22%             <18%        +7.78 pp     0.23 s
-Cones      8.95%             <15%        +6.05 pp     0.27 s
-Average    5.65%
+Tsukuba    3.25%             < 8%        +4.75 pp     0.12 s
+Venus      0.35%             < 5%        +4.65 pp     0.13 s
+Teddy     10.02%             <18%        +7.98 pp     0.23 s
+Cones      8.79%             <15%        +6.21 pp     0.23 s
 
-4-image (run.py) score:  99.8 × 0.79 = 78.7
-3-image Codalab-style:   11.3 × 0.52 = 5.9
+Generalisation set (Middlebury 2001 extras, threshold-free):
+  Sawtooth 1.30%, Bull 0.08%, Barn1 0.82%, Barn2 1.14%,
+  Poster 0.54%, Map 2.58%   →  6-image avg ≈ 1.08%
+
+3-image Codalab-style score: 3.25 × 0.35 × 10.02 × 0.48 ≈ 5.5
 
 == Environment ==
 
@@ -29,33 +31,44 @@ Run:
 
 == Algorithm summary ==
 
-Single-file implementation in computeDisp.py. Standard Middlebury 4-step
-pipeline with per-disparity thread parallelisation:
+Single-file implementation in computeDisp.py. Middlebury 4-step pipeline,
+parallelised across disparity slices:
 
-1. Cost computation:   9x7 Census transform + Hamming distance.
-                       Per-disparity Hamming slices computed in parallel
-                       (ThreadPoolExecutor, up to 8 workers — numpy releases
-                       the GIL during bitwise ops). Popcount uses
-                       numpy.bitwise_count (numpy >= 2.0) when available,
-                       otherwise vectorised SWAR popcount (~3.5x faster than
-                       a per-byte lookup table on the grader env).
+1. Cost computation:   9x7 Census transform + Hamming distance, popcount
+                       via numpy.bitwise_count when available, otherwise
+                       a vectorised SWAR fallback.
 2. R-direction cost:   Built from cost_L via column reindex —
                        cost_R[d,y,x] = cost_L[d,y,x+d] with column clamp.
-                       Skips an entire Hamming pass.
-3. Cost aggregation:   Guided filter on the L cost only (radius=7, eps=1e-2,
-                       BGR guide). Per-disparity guided-filter calls also
-                       parallelised. The R cost is left un-aggregated and
-                       feeds directly into the LR consistency check.
+3. Cost aggregation:   Weighted Guided Image Filter (Li 2015) implemented
+                       directly with cv2.boxFilter primitives. The eps
+                       parameter is per-pixel:
+
+                           γ(x)   = (var_I(x) + eps0) / mean(var_I + eps0)
+                           eps(x) = eps_base / γ(x)
+
+                       γ is large at edges (so eps small → edge preserved)
+                       and small in smooth regions (so eps large → denoised).
+                       Hyperparameters depend ONLY on image content; no
+                       branching on max_disp or image name.
+                       Settings: radius=5, eps_base=5e-4, eps0=1e-6.
 4. Optimization:       Per-pixel winner-take-all (argmin over disparity).
 5. Refinement:
    a. Left-right consistency check (threshold = 1).
    b. Scanline hole fill: min(nearest-valid-left, nearest-valid-right),
       max_disp padding at boundary.
    c. Parabolic sub-pixel disparity around the WTA argmin.
-   d. Weighted median filter (radius=15). Sub-pixel float is cast directly
-      to uint8 — the implicit floor of negative parabolic deltas acts as a
-      helpful tie-breaker in the median window.
+   d. Weighted median filter (radius=15) on the sub-pixel disparity.
 
-Allowed cv2.ximgproc primitives used: createGuidedFilter, weightedMedianFilter.
-Does NOT use cv2.StereoBM, cv2.StereoSGBM, or any other built-in stereo solver.
-No deep-learning components. No custom C extensions.
+Per-disparity Hamming and per-disparity aggregation are dispatched to a
+ThreadPoolExecutor (workers = min(cpu_count, 8)) — numpy and cv2 release
+the GIL during their C-level work, so multi-core graders see near-linear
+speedup on the parallelisable parts.
+
+Allowed cv2.ximgproc primitives used: weightedMedianFilter.
+(The guided filter is now implemented directly on cv2.boxFilter so it can
+expose a per-pixel eps; the cv2.ximgproc.createGuidedFilter version is
+retained as a reference in earlier git history.)
+
+Does NOT use cv2.StereoBM, cv2.StereoSGBM, or any other built-in stereo
+solver. No deep-learning components. No custom C extensions. No branching
+on max_disp or image name (TA 2026-05-27 supplementary rule).

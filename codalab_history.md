@@ -13,6 +13,7 @@ checking whether time optimisations transferred.
 | 2026-05-26 | `c7fdd04` | **50.30** | 3.81 | 0.41 | 9.72 | 3.34 s | ~14 (0.89 s) | 3.75× |
 | 2026-05-26 | (pending v4) | _projected 14–22_ | 3.07 | 0.34 | 10.25 | _0.86 s codalab-env_ | ~9.2 (0.86 s) | — |
 | 2026-05-27 | `b9da222` | **10.76** | 3.07 | 0.36 | 10.22 | 0.97 s | ~5.9 (0.52 s codalab-env) | 1.87× |
+| 2026-05-27 | (pending v6) | _projected 8–10_ | 3.25 | 0.35 | 10.02 | _0.48 s codalab-env_ | ~5.5 (0.48 s) | — |
 
 ## Per-submission notes
 
@@ -20,6 +21,25 @@ checking whether time optimisations transferred.
 - Pure Census + guided filter (radius=11, eps=1e-4) + integer WMF (radius=17)
 - LUT-based popcount, single-direction Hamming reused for both L/R via full re-computation
 - Placed last
+
+### v6 — (pending upload)
+- Replaced cv2.ximgproc.createGuidedFilter with a hand-written guided filter
+  using cv2.boxFilter primitives. Same math at constant eps, but the new
+  implementation lets us make eps **per-pixel**.
+- Adaptive eps from local guide variance (Weighted Guided Image Filter,
+  Li 2015):  γ(x) = (var_I(x) + eps0) / mean(var_I + eps0);
+  eps(x) = eps_base / γ(x). Small at edges (preserve), large in textureless
+  regions (denoise). Content-driven; no branching on max_disp or image name.
+- Hyperparameter sweep with the Codalab-equivalent venv as timing baseline.
+  Best: radius=5 (was 7), eps_base=5e-4 (was 1e-2 with non-adaptive GF),
+  eps0=1e-6.
+- Picked up 6 extra Middlebury 2001 datasets (Sawtooth, Bull, Barn1, Barn2,
+  Map, Poster) into `testdata/` to serve as a non-Codalab anti-overfit
+  set — average BPR ~1.08% across them.
+- Codalab-equivalent 3-image score: 5.5 (vs v5's 5.9). The change is
+  marginal locally; the bet is that the adaptive smoothing handles whatever
+  scene type the hidden image happens to be, since γ adapts to it
+  automatically.
 
 ### v5 — `b9da222` (Codalab Final = 10.76)
 - Codalab time 0.97 s vs local-codalab-env 0.52 s → ratio **1.87×**.
