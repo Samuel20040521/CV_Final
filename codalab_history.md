@@ -12,7 +12,7 @@ checking whether time optimisations transferred.
 | 2026-05-26 | `de508b6` | **72.67** | 4.50 | 0.54 | 10.84 | 2.76 s | ~48 (1.84 s) | 1.50× |
 | 2026-05-26 | `c7fdd04` | **50.30** | 3.81 | 0.41 | 9.72 | 3.34 s | ~14 (0.89 s) | 3.75× |
 | 2026-05-26 | (pending v4) | _projected 14–22_ | 3.07 | 0.34 | 10.25 | _0.86 s codalab-env_ | ~9.2 (0.86 s) | — |
-| 2026-05-27 | (pending v5) | _projected 8.5–14_ | 3.07 | 0.36 | 10.22 | _0.52 s codalab-env_ | ~5.9 (0.52 s) | — |
+| 2026-05-27 | `b9da222` | **10.76** | 3.07 | 0.36 | 10.22 | 0.97 s | ~5.9 (0.52 s codalab-env) | 1.87× |
 
 ## Per-submission notes
 
@@ -21,7 +21,17 @@ checking whether time optimisations transferred.
 - LUT-based popcount, single-direction Hamming reused for both L/R via full re-computation
 - Placed last
 
-### v5 — (pending upload)
+### v5 — `b9da222` (Codalab Final = 10.76)
+- Codalab time 0.97 s vs local-codalab-env 0.52 s → ratio **1.87×**.
+  That's halfway between v1's 1.45× and v2's 2.40×, which fits the theory:
+  dropping v2's scaled-WMF cut the per-image overhead, threading saturates
+  the grader's cores. No further "Codalab-specific" surprises so far.
+- BPR identical to local prediction (3.07 / 0.36 / 10.22), confirming the
+  codalab-equivalent venv is a faithful BPR-and-time predictor going forward.
+- Beat the classmate's 15.38 by ~30%. Still above the user's <10 target —
+  to break 10 we'd need ~10% more on either BPR product or time.
+
+
 - **Threading**: the per-disparity Hamming and guided-filter loops are now
   driven by `concurrent.futures.ThreadPoolExecutor` (workers = min(cpu_count,
   8)). numpy and cv2.ximgproc release the GIL during their C-level work, so

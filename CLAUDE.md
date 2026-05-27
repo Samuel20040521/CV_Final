@@ -37,6 +37,12 @@
 - ✅ **可以**使用 `cv2.ximgproc`（doc 明示 "Good News: you CAN use cv2.ximgproc"）。本專案用到 `createGuidedFilter` 與 `weightedMedianFilter`。
 - ❌ **不可以**使用 deep learning。doc 原文 "CANNOT use deep learning based methods."
 - 每張圖會給定 `max_disp`，不必搜超過此範圍（`eval.py` 的 config：Tsukuba=15, Venus=20, Teddy=60, Cones=60）。
+- ❌ **不可以針對特定圖片名稱或 `max_disp` 值切換超參數**（TA 2026-05-27 補充規範）。具體禁止：
+  - `if max_disp == 60: wmf_r = 21 else: wmf_r = 9`（用 max_disp 做 hardcoded 分支）
+  - `params = {"Tsukuba": ..., "Teddy": ...}` 之類用圖名選參數的 dict
+  - 任何 if/else/switch 切換濾波器大小、平滑權重等
+- ✅ **允許**：所有圖共用同一組固定超參數；或真正的 **自適應**（從**影像本身**算紋理複雜度、邊緣強度等動態決定）。`max_disp` **只能用來決定 cost volume 維度**，不能拿來選參數。
+- **Hidden 圖不會是 Cones**（TA 補充規範）— 演算法要對「沒見過的測資」robust。Cones 在本地當泛化測試 OK，但不能 overfit 過去。
 
 ## 評估架構（補充規範 §一.2）
 
