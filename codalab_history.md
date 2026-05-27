@@ -14,6 +14,7 @@ checking whether time optimisations transferred.
 | 2026-05-26 | (pending v4) | _projected 14–22_ | 3.07 | 0.34 | 10.25 | _0.86 s codalab-env_ | ~9.2 (0.86 s) | — |
 | 2026-05-27 | `b9da222` | **10.76** | 3.07 | 0.36 | 10.22 | 0.97 s | ~5.9 (0.52 s codalab-env) | 1.87× |
 | 2026-05-27 | (pending v6) | _projected 8–10_ | 3.25 | 0.35 | 10.02 | _0.48 s codalab-env_ | ~5.5 (0.48 s) | — |
+| 2026-05-27 | (v7 explored) | not uploaded; baseline wins | — | — | — | — | — | — |
 
 ## Per-submission notes
 
@@ -21,6 +22,36 @@ checking whether time optimisations transferred.
 - Pure Census + guided filter (radius=11, eps=1e-4) + integer WMF (radius=17)
 - LUT-based popcount, single-direction Hamming reused for both L/R via full re-computation
 - Placed last
+
+### v7 exploration — 4 alternatives tested, baseline wins (no upload)
+Following the paper survey we built 4 v7 variants in `experiments/`, each
+replacing v6's WGIF aggregation with a different approach. Run on all
+10 local images in the Codalab-equivalent venv via
+`scripts/compare_variants.py`:
+
+| Variant | 3-img score | 4-img time | 6-gen avg |
+|---|---:|---:|---:|
+| **v6_baseline (WGIF)** | **5.06** | 0.71 s | 1.07 |
+| v7_crossscale | 5.71 | 0.84 s | 1.03 |
+| v7_iter | 7.37 | 0.99 s | 1.06 |
+| v7_sgm (WGIF → 4-dir SGM cascade) | 7.87 | 1.14 s | 1.06 |
+| v7_mst (Yang 2012) | 514 | 36.4 s | 1.12 |
+
+Findings:
+- **MST** was correct mathematically (Tsukuba 3.05 vs baseline 3.22 — best BPR
+  we ever measured on Tsukuba) but the per-node Python tree traversal makes it
+  ~50× slower than baseline. Without C/numba/Cython, MST is non-viable.
+- **SGM** cascade (WGIF then 4-dir SGM) improves Tsukuba BPR meaningfully
+  (3.08 vs 3.22) and Teddy slightly (10.02 vs 10.05), but the +60% time more
+  than wipes the BPR gain. Pure-numpy scanline DP is fundamentally Python-loop
+  bound.
+- **Cross-scale** (2-level pyramid WGIF) and **iterative** (confidence-blended
+  2-pass WGIF) added overhead without enough BPR improvement to compensate.
+- v6 WGIF + threading is at the practical local optimum for our pipeline
+  shape; further wins would require either a fundamentally different cost
+  function or a non-Python aggregation backend.
+
+Code retained in `experiments/` for future reference and the report.
 
 ### v6 — (pending upload)
 - Replaced cv2.ximgproc.createGuidedFilter with a hand-written guided filter
