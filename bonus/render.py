@@ -61,6 +61,63 @@ def render_pointcloud_flythrough(
     return out_path
 
 
+def render_mesh_follow_trajectory(
+    mesh: o3d.geometry.TriangleMesh,
+    poses_world_cam: list[np.ndarray],
+    K: np.ndarray,
+    image_wh: tuple[int, int],
+    out_path: Path,
+    fps: int = 30,
+    upscale: int = 2,
+) -> Path:
+    """Render the mesh from each pose in ``poses_world_cam`` and stitch into an mp4.
+
+    First-person walkthrough of the reconstructed scene: at each frame we
+    place a virtual camera at the original capture pose and render the fused
+    mesh from there. The resulting video should overlap with the original
+    image sequence pixel-for-pixel if reconstruction is good — that makes it
+    the most direct visual sanity check we can do without ground-truth mesh.
+
+    Sidesteps the "where's up in the world frame" question that orbit
+    rendering has, because each pose already tells us its own up axis
+    (image-up = camera -Y).
+
+    Args:
+        image_wh: (W, H) of the input frames the intrinsic ``K`` was calibrated
+            on. The render canvas is ``image_wh * upscale`` to keep the same
+            field-of-view at higher pixel density.
+        upscale: integer scale for render resolution; keeps aspect ratio intact
+            (anisotropic scaling would break the K-mapping).
+    """
+    iw, ih = image_wh
+    rw, rh = iw * upscale, ih * upscale
+    fx = float(K[0, 0]) * upscale
+    fy = float(K[1, 1]) * upscale
+    cx = float(K[0, 2]) * upscale
+    cy = float(K[1, 2]) * upscale
+
+    renderer = o3d.visualization.rendering.OffscreenRenderer(rw, rh)
+    scene = renderer.scene
+    scene.set_background([0.05, 0.05, 0.08, 1.0])
+
+    mat = o3d.visualization.rendering.MaterialRecord()
+    mat.shader = "defaultLit"
+    scene.add_geometry("mesh", mesh, mat)
+
+    intrinsic = o3d.camera.PinholeCameraIntrinsic(rw, rh, fx, fy, cx, cy)
+
+    frames = []
+    for T_world_cam in poses_world_cam:
+        T_cam_world = np.linalg.inv(T_world_cam)
+        renderer.setup_camera(intrinsic, T_cam_world)
+        img = np.asarray(renderer.render_to_image())
+        frames.append(img)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    iio.imwrite(out_path, np.stack(frames, axis=0), fps=fps, codec="libx264")
+    return out_path
+
+
 def render_flythrough(
     mesh: o3d.geometry.TriangleMesh,
     out_path: Path,
