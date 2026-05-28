@@ -12,9 +12,10 @@ so partial files resume cleanly.
 
 Usage::
 
-    uv run python -m bonus.download_tartanair                       # defaults
+    uv run python -m bonus.download_tartanair                       # defaults (japanesealley/Hard, ~3 GB)
     uv run python -m bonus.download_tartanair --scene office --level Easy
     uv run python -m bonus.download_tartanair --modalities image_left,image_right  # stereo only
+    uv run python -m bonus.download_tartanair --all                 # every scene at the chosen level
 
 Final layout (default scene/level)::
 
@@ -41,6 +42,15 @@ from typing import List
 
 HF_BASE = "https://huggingface.co/datasets/theairlabcmu/tartanair/resolve/main"
 MODALITIES = ("image_left", "image_right", "depth_left", "depth_right")
+
+# All TartanAir V1 scenes (used by ``--all``). Sourced from the official
+# `download_training_zipfiles.txt`; kept inline so the script is hermetic.
+ALL_SCENES = (
+    "abandonedfactory", "abandonedfactory_night", "amusement", "carwelding",
+    "endofworld", "gascola", "hospital", "japanesealley", "neighborhood",
+    "ocean", "office", "office2", "oldtown", "seasidetown",
+    "seasonsforest", "seasonsforest_winter", "soulcity", "westerndesert",
+)
 
 
 def _curl_resume(url: str, dest: Path) -> None:
@@ -90,11 +100,15 @@ def main() -> None:
         description="Download one TartanAir V1 sequence from the HuggingFace mirror."
     )
     p.add_argument("--scene", default="japanesealley",
-                   help="scene name (lowercase, e.g. japanesealley, office, carwelding)")
+                   help="scene name (lowercase, e.g. japanesealley, office, carwelding); "
+                        "ignored if --all is set")
     p.add_argument("--level", default="Hard", choices=["Easy", "Hard"],
                    help="trajectory difficulty (Easy or Hard)")
     p.add_argument("--modalities", default=",".join(MODALITIES),
                    help="comma-separated subset of {}".format(MODALITIES))
+    p.add_argument("--all", action="store_true",
+                   help="fetch every TartanAir V1 scene at --level (large — ~30-70 GB "
+                        "depending on level and modalities). Default is just --scene.")
     p.add_argument("--cache", default=Path("data/tartanair_cache"), type=Path,
                    help="zip download dir (kept after unzip so re-runs resume fast)")
     p.add_argument("--root", default=Path("data/tartanair_raw"), type=Path,
@@ -113,25 +127,29 @@ def main() -> None:
     if unknown:
         sys.exit("[error] unknown modalities: {} (valid: {})".format(unknown, MODALITIES))
 
+    scenes = ALL_SCENES if args.all else (args.scene,)
+    print("[plan] {} scene(s) × {} modality at level {} ({} total zips)".format(
+        len(scenes), len(mods), args.level, len(scenes) * len(mods)))
+
     args.cache.mkdir(parents=True, exist_ok=True)
-    zips: List[Path] = []
-    for mod in mods:
-        url = "{}/{}/{}/{}.zip".format(HF_BASE, args.scene, args.level, mod)
-        dest = args.cache / "{}_{}_{}.zip".format(args.scene, args.level, mod)
-        print("[get] {}".format(url))
-        _curl_resume(url, dest)
-        zips.append(dest)
-
-    if args.no_unzip:
-        print("[done] cached {} zip(s) at {}".format(len(zips), args.cache))
-        return
-
     args.root.mkdir(parents=True, exist_ok=True)
-    for z in zips:
-        print("[unzip] {} -> {}".format(z.name, args.root))
-        _unzip(z, args.root)
-    print("[done] TartanAir {}/{} ready at {}/{}/{}".format(
-        args.scene, args.level, args.root, args.scene, args.level))
+    for scene in scenes:
+        zips: List[Path] = []
+        for mod in mods:
+            url = "{}/{}/{}/{}.zip".format(HF_BASE, scene, args.level, mod)
+            dest = args.cache / "{}_{}_{}.zip".format(scene, args.level, mod)
+            print("[get] {}".format(url))
+            _curl_resume(url, dest)
+            zips.append(dest)
+        if args.no_unzip:
+            print("[skip-unzip] cached {} zip(s) for {}/{}".format(len(zips), scene, args.level))
+            continue
+        for z in zips:
+            print("[unzip] {} -> {}".format(z.name, args.root))
+            _unzip(z, args.root)
+        print("[done] {}/{} ready at {}/{}/{}".format(
+            scene, args.level, args.root, scene, args.level))
+    print("[done] all requested scenes complete ({})".format(", ".join(scenes)))
 
 
 if __name__ == "__main__":

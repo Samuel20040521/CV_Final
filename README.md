@@ -1,151 +1,209 @@
 # CV Final — Stereo Matching
 
-NTU Computer Vision Spring 2026 final project. Implements the 4-step Middlebury stereo matching pipeline (Census cost → guided-filter aggregation → winner-take-all → LR check + hole fill + weighted median).
+NTU Computer Vision Spring 2026 final project. Two halves:
 
-## Quick start (uv)
+| Part | What | TA grading weight |
+|---|---|---|
+| **[Part 1 — Basic](#part-1--basic-middlebury-stereo)** | Disparity estimator scored on 4 Middlebury v2 pairs (Tsukuba / Venus / Teddy / Cones) via `eval.py` | 80% |
+| **[Part 2 — Bonus](#part-2--bonus-tartanair-3d-reconstruction)** | Real-world stereo pipeline: TartanAir → v6 disparity → TSDF mesh → first-person walkthrough mp4 | 25% |
 
-```bash
-uv sync
-uv run python eval.py --image Teddy
-```
+Branch `Teng` is where active bonus work lives; `main` carries the basic-task v6 baseline. Both halves are runnable from a fresh clone of `Teng`.
 
-The first command creates `.venv/` from `pyproject.toml` / `uv.lock` and pins Python 3.11.
-The second runs the full pipeline and prints the bad-pixel ratio.
-
-Run on any of the four Middlebury v2 pairs (drop them into `testdata/<name>/`):
+## Environment
 
 ```bash
-uv run python eval.py --image Tsukuba   # target <8%
-uv run python eval.py --image Venus     # target <5%
-uv run python eval.py --image Teddy     # target <18%
-uv run python eval.py --image Cones     # target <15%
+uv sync                  # base deps (Part 1)
+uv sync --extra bonus    # adds open3d, imageio, scipy (Part 2)
 ```
 
-`main.py` is equivalent but also writes `<name>.png` (the scaled disparity map) to the project root.
+Python is pinned to 3.11 via `.python-version`. The grader runs Python 3.8+; the `computeDisp.py` implementation stays in 3.8-safe syntax.
 
-## Layout
+---
+
+## Part 1 — Basic (Middlebury stereo)
+
+`computeDisp.py` is a flat single-file implementation of the standard 4-step Middlebury pipeline:
+
+```
+  Census transform → Hamming cost volume
+  → Weighted Guided Image Filter aggregation (adaptive per-pixel eps)
+  → Winner-take-all
+  → LR consistency → hole fill → weighted median
+```
+
+It parallelises the per-disparity inner loops with a thread pool because `numpy` / `cv2.ximgproc` release the GIL.
+
+### Run
+
+```bash
+uv run python eval.py --image Teddy        # target BPR <18%
+uv run python eval.py --image Tsukuba      # target <8%
+uv run python eval.py --image Venus        # target <5%
+uv run python eval.py --image Cones        # target <15%
+```
+
+`main.py` is the same pipeline plus a PNG dump (`<name>.png`) for visual checking:
+
+```bash
+uv run python main.py --image Teddy
+```
+
+### Local baselines (Teng's machine)
+
+| Image | BPR | Time |
+|---|---|---|
+| Teddy | 10.00% | 0.27 s |
+
+Other three pairs only run on Codalab / the TA hidden image at submission time.
+
+### TA-facing contract
+
+`eval.py` and `main.py` both do `from computeDisp import computeDisp`, so `computeDisp.py` must remain at the repo root and expose that name. Do **not** edit `eval.py` (TA grading file). `main.py` CLI is `python3 main.py --image <name>` — don't change the interface.
+
+### Layout
 
 ```
 CV_Final/
-├── pyproject.toml          uv project + dependencies
-├── .python-version         pins Python 3.11
-├── eval.py                 grading script (do not edit)
-├── main.py                 entry point with visualization
-├── computeDisp.py          shim: re-exports computeDisp from the package
-├── stereo_matching/        the implementation
-│   ├── pipeline.py         orchestrator — public computeDisp()
-│   ├── cost.py             Step 1: census transform + Hamming cost volume
-│   ├── aggregation.py      Step 2: guided-filter aggregation
-│   ├── optimization.py     Step 3: winner-take-all
-│   └── refinement.py       Step 4: LR consistency → hole fill → weighted median
-├── testdata/               Middlebury v2 pairs (img_left.png, img_right.png, disp_gt.png)
-└── requirement.txt         grader-facing dependency list (mirror of pyproject.toml)
+├── eval.py                    grader file (do not edit)
+├── main.py                    visualisation entry (do not edit interface)
+├── computeDisp.py             flat v6 stereo implementation (~400 lines)
+├── pyproject.toml             uv project + dependencies
+├── requirement.txt            mirror of pyproject.toml for the TA's pip install
+├── testdata/{Teddy,Tsukuba,Venus,Cones}/   Middlebury v2 pairs (committed)
+└── experiments/eval_tartanair.py           BPR eval on TartanAir GT depth (Part 2 diagnostic)
 ```
 
-## Why this layout
+---
 
-`eval.py` is uneditable and does `from computeDisp import computeDisp`, so a top-level
-`computeDisp.py` must remain. It is a one-line shim that re-exports the implementation
-from the `stereo_matching` package. This keeps the assignment's import contract intact
-while allowing the algorithm to live in proper submodules.
+## Part 2 — Bonus (TartanAir 3D reconstruction)
 
-The package is flat (no `src/`) so `python eval.py` works without an install step.
+End-to-end pipeline: stereo matcher → TSDF fusion → first-person walkthrough mp4 of the reconstructed alley. Reuses `computeDisp` from Part 1 unchanged, so the bonus track can't affect the 80% score.
 
-## Bonus track — real-world / photoreal stereo
-
-The `bonus/` package builds an end-to-end depth pipeline on stereo footage and
-produces a flythrough video of the reconstructed scene. It reuses
-`stereo_matching.computeDisp` unchanged, so the bonus pipeline cannot affect
-the main 80% score.
-
-Install bonus deps (open3d, imageio, scipy):
+### TL;DR — three commands
 
 ```bash
+# 1. Install bonus deps
 uv sync --extra bonus
-```
 
-### Active dataset — TartanAir V1 (default: `japanesealley/Hard`)
-
-TartanAir gives us **stereo pairs + GT depth + GT camera poses** in one
-package, so we can validate both disparity quality (BPR vs. GT depth) and
-trajectory-conditioned 3D fusion. Source: the official Hugging Face mirror
-`theairlabcmu/tartanair`.
-
-```bash
+# 2. Fetch the demo dataset (~3 GB zip / ~11 GB unzipped)
 uv run python -m bonus.download_tartanair
+
+# 3. Render the walkthrough
+uv run python -m bonus.run_bonus_tartanair --end 100 --out out/v6_demo.mp4
 ```
 
-That fetches `japanesealley/Hard` — six trajectories `P000..P005` totalling
-2705 stereo frames. Wire size: ~3 GB of zip cache, ~11 GB after unzip. The
-script is resumable; re-running it skips files that are already complete.
+After step 3 you'll have an mp4 of v6's reconstruction of `japanesealley/Hard/P000` replayed from the original camera poses.
 
-Common variants:
+### Fetching the dataset
+
+`bonus/download_tartanair.py` pulls from the official HuggingFace mirror (`theairlabcmu/tartanair`). The upstream AirLab Ceph host stalls badly for non-CMU networks (~25 KB/s with frequent SSL drops); HF sustains 5–10 MB/s and supports HTTP `Range` so resumes work cleanly.
 
 ```bash
+# Default — just the demo dataset (japanesealley/Hard, ~3 GB)
+uv run python -m bonus.download_tartanair
+
 # Different scene/level
 uv run python -m bonus.download_tartanair --scene office --level Easy
 
-# Stereo only, no GT depth (saves ~1 GB)
+# Stereo only, no GT depth (skip the BPR eval part, saves ~1 GB)
 uv run python -m bonus.download_tartanair --modalities image_left,image_right
 
-# Keep zips, don't unzip
-uv run python -m bonus.download_tartanair --no-unzip
+# Every TartanAir V1 scene at the chosen level (large: 30-70 GB)
+uv run python -m bonus.download_tartanair --all
+uv run python -m bonus.download_tartanair --all --level Easy
 ```
 
-After download, each `P00X/` contains:
+The downloader uses `curl --retry-all-errors -C -` so partial files resume on the next run. Zips land in `data/tartanair_cache/` and are unzipped to `data/tartanair_raw/`.
 
-| Item | Format | Notes |
-|---|---|---|
-| `image_left/000XXX_left.png` | 640×480 PNG | Already rectified, pinhole |
-| `image_right/000XXX_right.png` | 640×480 PNG | Baseline 0.25 m |
-| `depth_left/000XXX_left_depth.npy` | (480,640) float32 | Metres; sky/inf clipped to 65504 |
-| `depth_right/000XXX_right_depth.npy` | (480,640) float32 | |
-| `pose_left.txt` | one row per frame | `tx ty tz qx qy qz qw`, unit quaternion |
-| `pose_right.txt` | one row per frame | Same format |
+After unzipping, one trajectory looks like:
 
-Camera intrinsics (constant): `fx = fy = 320, cx = 320, cy = 240`.
+```
+data/tartanair_raw/japanesealley/Hard/P000/
+├── image_left/  000XXX_left.png      640×480 PNG, rectified
+├── image_right/ 000XXX_right.png     baseline 0.25 m
+├── depth_left/  000XXX_left_depth.npy (480, 640) float32 metres
+├── depth_right/ 000XXX_right_depth.npy
+├── pose_left.txt                     tx ty tz qx qy qz qw per row, NED-body convention
+└── pose_right.txt
+```
 
-**Why the HuggingFace mirror, not the upstream AirLab Ceph host?** Two reasons.
-First, the AirLab endpoint `airlab-cloud.andrew.cmu.edu` stalls badly for
-non-CMU networks: we measured ~25 KB/s averaged across mid-transfer SSL
-timeouts. The HF CDN sustains 5-10 MB/s here. Second, HF supports `Range`
-requests so the downloader resumes partial zips cleanly. The downloader's
-`curl` flags (`--retry-all-errors`, `--speed-limit/--speed-time`) are tuned
-for the failure modes we saw on AirLab; they don't hurt on HF.
+Camera intrinsics are constant across TartanAir V1: `fx = fy = 320, cx = 320, cy = 240`.
 
-### Legacy — KITTI raw
-
-The original bonus track used KITTI raw drives (real driving footage, GPS/IMU
-poses, no GT depth). Code under `bonus/kitti.py`, `bonus/download_sample.py`,
-and `bonus/run_bonus.py` is preserved for report comparison.
+### Running the 3D pipeline
 
 ```bash
-uv run python -m bonus.download_sample --root data/kitti_raw  # ~60 MB
-uv run python -m bonus.run_bonus \
-    --kitti-root data/kitti_raw \
-    --date 2011_09_26 --drive 0005 \
-    --start 0 --end 100 --stride 2 \
-    --max-disp 96 \
-    --rectify scratch \
-    --out out/bonus_demo.mp4
+# v6 prediction → TSDF → walkthrough (main demo)
+uv run python -m bonus.run_bonus_tartanair --end 100 --out out/v6.mp4
+
+# GT-depth reference → TSDF → walkthrough (pipeline upper bound)
+uv run python -m bonus.run_bonus_tartanair --use-gt-depth --end 100 --out out/gt.mp4
+
+# Different trajectory or longer cut
+uv run python -m bonus.run_bonus_tartanair --traj P001 --end 200 --out out/p001.mp4
 ```
 
-`--rectify scratch` uses the from-scratch rectification (textbook decomposition
-of R, T into rectification homographies, then `cv2.remap`). `--rectify kitti`
-uses the rectification rotations KITTI publishes — switch between them for
-the report.
+Pipeline stages (`bonus/run_bonus_tartanair.py`):
+
+1. `bonus.tartanair.list_frames` / `load_poses` — read TartanAir files; convert pose from NED body axes (x=fwd, y=right, z=down) into OpenCV camera convention (x=right, y=down, z=fwd) via a right-multiplied axis permutation. Without this conversion, depth gets back-projected along world-z (vertical) instead of along the alley.
+2. `computeDisp(Il, Ir, max_disp)` — v6 disparity, OR `np.load(depth_left.npy)` if `--use-gt-depth`.
+3. `bonus.depth.disparity_to_depth(disp, fx, baseline)` — Z = fx·B / d.
+4. Mask sky (depth ≥ 65000, which is float16 max — TartanAir's inf marker) and far-range pixels (depth > `--depth-trunc`).
+5. `bonus.fusion.integrate_frame` — Open3D ScalableTSDFVolume integration.
+6. `bonus.render.render_mesh_follow_trajectory` — re-render the fused mesh from each original capture pose. This gives a video that overlays the reconstruction with the input sequence and sidesteps the "where's up in this world frame" question that orbit rendering would need to solve.
+
+### BPR diagnostic
+
+Optional — run v6 on TartanAir frames and compute Middlebury-style BPR against GT depth (converted to GT disparity via fx·B / depth):
+
+```bash
+uv run python -m experiments.eval_tartanair --end 100               # default: Hard P000, threshold 1px
+uv run python -m experiments.eval_tartanair --threshold 3.0         # KITTI / TartanAir convention
+uv run python -m experiments.eval_tartanair --traj P001 --max-disp 192   # try other trajectories
+```
+
+Baseline result on `japanesealley/Hard/P000` frames 0..99 with `max_disp=64`:
+
+| Threshold | mean BPR | median | worst | best |
+|---|---|---|---|---|
+| 1.0 px | 20.21% | 20.17% | 33.31% | 9.51% |
+| 3.0 px | 10.75% | 10.18% | 26.86% | 2.83% |
+
+Time: 0.36 s/frame. We tried other scenes/trajectories looking for a "better" baseline — Easy levels and indoor `office/Easy` were *worse* (40–46% at 1 px) because they have closer objects (wider disparity range → wider search → more ambiguity) or texture-less surfaces. P000's far-distance trajectory is unusually well-suited to classical stereo.
+
+The bonus demo doesn't depend on hitting a specific BPR — the 20% number is just an honest report of what v6 can do on this dataset, comparable to classical stereo numbers in the TartanAir literature.
 
 ### Bonus layout
 
 ```
 bonus/
-├── download_tartanair.py  ★ active — fetch a TartanAir V1 sequence (HF mirror)
-├── download_sample.py        legacy — fetch a small KITTI raw drive
-├── kitti.py                  KITTI raw loader (calibration + OXTS poses)
-├── rectify.py                calibrated stereo rectification from first principles
-├── depth.py                  disparity → metric depth → colored point cloud
-├── fusion.py                 Open3D ScalableTSDFVolume multi-frame integration
-├── render.py                 offscreen orbit flythrough → mp4
-├── single_frame.py           one-shot disparity + point-cloud preview
-└── run_bonus.py              end-to-end CLI (KITTI)
+├── download_tartanair.py       ★ HF-mirror downloader; --all fetches every V1 scene
+├── tartanair.py                ★ V1 loader: intrinsics + frames + pose (NED → OpenCV)
+├── run_bonus_tartanair.py      ★ active CLI: stereo → TSDF → first-person walkthrough mp4
+├── depth.py                    disparity → metric depth
+├── fusion.py                   Open3D ScalableTSDFVolume integration + mesh extract
+├── render.py                   render_mesh_follow_trajectory + orbit fallback
+├── single_frame.py             single-frame disparity + point-cloud preview (KITTI)
+├── kitti.py                    legacy — KITTI raw loader (OXTS, calib_cam_to_cam)
+├── download_sample.py          legacy — fetch a small KITTI raw drive
+├── rectify.py                  legacy — from-scratch stereo rectification (for KITTI raw)
+└── run_bonus.py                legacy — KITTI CLI
+
+experiments/
+└── eval_tartanair.py           Middlebury-style BPR on TartanAir GT depth
+
+data/                           ★ gitignored; populated by download scripts
+├── tartanair_raw/<scene>/<level>/P00X/...
+└── tartanair_cache/                       (zip cache, kept for resume)
 ```
+
+The KITTI files are kept as reference / report comparison — they were the original bonus track before we switched to TartanAir to get ground-truth poses + GT depth in one package.
+
+---
+
+## Submission contract recap
+
+- 6/1 23:59 — code freeze, email to `fushengyu@media.ee.ntu.edu.tw`. Contents: Python code + a `.txt` with current local numbers. TA runs the hidden image with our 6/1 code on 6/2.
+- 6/5 23:59 — report (PDF + slides) + bonus code + a `.txt` explaining bonus CLI, to the same email.
+- Don't edit `eval.py`. Don't hard-code per-image hyperparameters (TA's 2026-05-27 invariance rule). `Cones` won't be the hidden image.
+
+See `CLAUDE.md` for the full set of constraints.
