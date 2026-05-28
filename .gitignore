@@ -16,6 +16,13 @@ __pycache__/
 /data/
 /out/
 
+# Local Claude Code session state (per-machine, not source)
+.claude/
+
+# Old / one-off archives at the repo root (not source)
+/Stereo_Matching.zip
+/*_final.zip
+
 # OS / editor
 .DS_Store
 .vscode/
