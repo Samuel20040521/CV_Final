@@ -24,7 +24,7 @@ import cv2
 import numpy as np
 import open3d as o3d
 
-from stereo_matching import computeDisp
+from computeDisp import computeDisp
 from . import depth as depth_mod
 from . import kitti
 from . import rectify as rect_mod

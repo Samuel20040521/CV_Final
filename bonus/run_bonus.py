@@ -23,7 +23,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-from stereo_matching import computeDisp
+from computeDisp import computeDisp
 from . import depth as depth_mod
 from . import fusion
 from . import kitti
