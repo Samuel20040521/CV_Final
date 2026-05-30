@@ -1,16 +1,10 @@
-=== Tsukuba ===
+2026 CV Final Project -- Stereo Matching
 Processing image Tsukuba ...
-[Time] 0.1451 sec
-[Bad Pixel Ratio] 3.21%
-=== Venus ===
+[Time] 0.1772 sec
+[Bad Pixel Ratio] 3.41%
 Processing image Venus ...
-[Time] 0.2154 sec
-[Bad Pixel Ratio] 0.34%
-=== Teddy ===
+[Time] 0.1964 sec
+[Bad Pixel Ratio] 0.31%
 Processing image Teddy ...
-[Time] 0.3798 sec
-[Bad Pixel Ratio] 10.85%
-=== Cones ===
-Processing image Cones ...
-[Time] 0.3730 sec
-[Bad Pixel Ratio] 9.30%
+[Time] 0.3358 sec
+[Bad Pixel Ratio] 10.09%
