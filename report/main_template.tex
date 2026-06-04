@@ -1,0 +1,139 @@
+% !TEX program = xelatex
+% =====================================================================
+%  通用報告樣板 (XeLaTeX + 中文 TW-Kai,含粗體)
+%  編譯:xelatex -> biber -> xelatex -> xelatex   (或 latexmk -xelatex)
+%  需求:TW-Kai(全字庫正楷體)字型。Overleaf 內建;本機可從
+%        https://www.cns11643.gov.tw/opendata/Fonts_Kai.zip 取得後
+%        放入 ~/.local/share/fonts/ 並執行 fc-cache。
+% =====================================================================
+\documentclass[12pt,a4paper]{article}
+
+% ---- 版面 ----------------------------------------------------------
+\usepackage[margin=1in]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{titling}
+\setlength{\droptitle}{-1.5cm}
+\usepackage{fancyhdr}
+\setlength{\headheight}{15pt}
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\lhead{\leftmark}\rhead{\thepage}
+\parindent=24pt
+
+% ---- 數學與符號 ----------------------------------------------------
+\usepackage{amsmath,amsthm,amssymb,amsbsy,bm}
+\usepackage{siunitx}
+
+% ---- 圖、表 --------------------------------------------------------
+\usepackage{graphicx}
+\graphicspath{{figures/}{reports/figures/}}
+\usepackage{float}
+\usepackage{subfig}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage{enumitem}
+
+% ---- 連結 ----------------------------------------------------------
+\usepackage{xcolor}
+\usepackage[unicode=true,pdfborder={0 0 0},bookmarksdepth=-1,
+            colorlinks=true,linkcolor=blue!55!black,citecolor=blue!55!black,
+            urlcolor=teal]{hyperref}
+
+% ---- 參考文獻(biblatex + biber)----------------------------------
+\usepackage[backend=biber,style=numeric,giveninits=true]{biblatex}
+\addbibresource{references.bib}
+% 範例書目(自含,讓樣板可獨立編譯;實際使用時刪掉此 filecontents、
+% 改用你自己的 references.bib):
+\begin{filecontents}[overwrite]{references.bib}
+@article{Sample2024,
+  author  = {Wang, M. and Lee, C.},
+  title   = {An example reference for the template},
+  journal = {Journal of Examples},
+  year    = {2024}, volume = {1}, pages = {1--10}
+}
+\end{filecontents}
+
+% ---- 中文字型:TW-Kai,並啟用「假粗體 / 假斜體」-------------------
+%  TW-Kai 僅有 Regular 一個字重,故以 AutoFakeBold 合成粗體
+%  (\textbf{中文} 才會變粗),AutoFakeSlant 合成斜體。
+\usepackage{xeCJK}
+\setCJKmainfont{TW-Kai}[AutoFakeBold=2.5, AutoFakeSlant=0.2]
+
+% ---- 自訂指令 / 定理樣式 ------------------------------------------
+\newcommand{\gauss}{\ \text{G}}
+\newtheoremstyle{mystyle}{6pt}{15pt}{}{}{\bfseries}{.}{1em}{}
+\theoremstyle{mystyle}
+\newtheorem{thm}{定理}
+\newtheorem{dfn}{定義}
+
+% =====================================================================
+\title{\bfseries 報告標題(中文粗體)\\[4pt]
+       \large 副標題}
+\author{作者一、作者二\\ \normalsize 國立臺灣大學 物理學系}
+\date{實驗日期:2026 年 5 月 18 日}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\begin{abstract}
+\noindent 這是摘要。本樣板使用 \textbf{TW-Kai(全字庫正楷體)} 作為中文字型,
+並透過 \texttt{AutoFakeBold} 讓 \textbf{中文粗體}正常顯示。以下示範
+\textbf{粗體}、\emph{斜體}、行內數學 $f_L=\gamma_p B/2\pi$ 與單位
+\SI{2.675e8}{\radian\per\second\per\tesla}。
+\end{abstract}
+
+\section{前言}
+這是一段內文。重點以\textbf{粗體}標示,例如\textbf{自旋--晶格弛豫時間 $T_1$}
+與\textbf{表觀橫向弛豫時間 $T_2^{*}$}。可引用文獻~\cite{Sample2024}。
+
+\section{方法與公式}
+方程式範例(可用 \texttt{\textbackslash eqref} 交叉參照):
+\begin{equation}
+M(t)=M_\infty\!\left(1-e^{-t/T_1}\right).
+\label{eq:sat}
+\end{equation}
+如式~\eqref{eq:sat} 所示,磁化量隨時間飽和。
+
+\begin{thm}[範例定理]
+這是定理環境的範例(標題為粗體)。
+\end{thm}
+
+\section{圖與表}
+% --- 圖(實際使用時取消註解,並把圖檔放進 figures/)---
+% \begin{figure}[htbp]
+%   \centering
+%   \includegraphics[width=0.7\linewidth]{your_figure.png}
+%   \caption{圖說。}
+%   \label{fig:demo}
+% \end{figure}
+\begin{figure}[htbp]
+  \centering
+  \fbox{\rule{0pt}{3cm}\rule{6cm}{0pt}}%
+  \caption{圖片佔位框(把上面那行換成 \texttt{\textbackslash includegraphics}）。}
+  \label{fig:demo}
+\end{figure}
+
+表格範例(\texttt{booktabs} 風格)見表~\ref{tab:demo}。
+\begin{table}[htbp]
+  \centering
+  \caption{表格範例。}
+  \label{tab:demo}
+  \begin{tabular}{lcc}
+    \toprule
+    項目 & 量測值 & 不確定度 \\
+    \midrule
+    $T_1$ (s)     & $3.74$ & $0.18$ \\
+    $T_2^{*}$ (s) & $0.75$ & ---    \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{結論}
+\textbf{結論}:本樣板可獨立編譯,中文為 TW-Kai 且\textbf{粗體有效}。
+
+\printbibliography
+\end{document}

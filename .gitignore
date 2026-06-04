@@ -23,6 +23,20 @@ __pycache__/
 /Stereo_Matching.zip
 /*_final.zip
 
+# LaTeX build artifacts (keep .tex / .bib / .pdf, drop intermediates)
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+*.xdv
+*.toc
+
 # OS / editor
 .DS_Store
 .vscode/
