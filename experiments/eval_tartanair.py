@@ -21,6 +21,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import importlib
 import time
 from pathlib import Path
 from typing import List, Tuple
@@ -29,7 +30,9 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-from computeDisp import computeDisp
+
+# Map --matcher choice to the module that exposes computeDisp.
+MATCHER_MODULES = {"v6": "computeDisp", "v8": "computeDisp_v8"}
 
 
 # TartanAir intrinsics (constant for the whole dataset).
@@ -71,8 +74,13 @@ def main() -> None:
     p.add_argument("--end", default=100, type=int, help="last frame index (exclusive)")
     p.add_argument("--max-disp", default=64, type=int)
     p.add_argument("--threshold", default=1.0, type=float, help="disparity error threshold (pixels)")
+    p.add_argument("--matcher", default="v6", choices=sorted(MATCHER_MODULES),
+                   help="which computeDisp implementation to import (default: v6 from computeDisp.py)")
     p.add_argument("--verbose", action="store_true", help="print per-frame BPR")
     args = p.parse_args()
+
+    computeDisp = importlib.import_module(MATCHER_MODULES[args.matcher]).computeDisp
+    print("[setup] matcher = {} ({}.computeDisp)".format(args.matcher, MATCHER_MODULES[args.matcher]))
 
     traj_dir = args.root / args.scene / args.level / args.traj
     if not traj_dir.is_dir():
@@ -114,6 +122,7 @@ def main() -> None:
     print("=" * 60)
     print("Scene:      {}/{}/{}  frames {}..{}".format(
         args.scene, args.level, args.traj, args.start, args.end - 1))
+    print("Matcher:    {} ({})".format(args.matcher, MATCHER_MODULES[args.matcher]))
     print("Settings:   max_disp={}  threshold={:.1f}px".format(args.max_disp, args.threshold))
     print("-" * 60)
     print("BPR  mean={:.2%}  median={:.2%}  worst={:.2%}  best={:.2%}".format(

@@ -18,6 +18,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import importlib
 import time
 from pathlib import Path
 
@@ -25,11 +26,16 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-from computeDisp import computeDisp
 from . import depth as depth_mod
 from . import fusion
 from . import render
 from . import tartanair
+
+
+# Map --matcher choice to the module that exposes computeDisp.
+# Keep v6 (committed at the repo root as computeDisp.py) as the default so the
+# bonus pipeline keeps reproducing the README baseline without flags.
+MATCHER_MODULES = {"v6": "computeDisp", "v8": "computeDisp_v8"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,8 +49,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--stride", type=int, default=1)
     p.add_argument("--max-disp", type=int, default=64,
                    help="disparity search range; P000-style 'far' trajectories peak ~33")
+    p.add_argument("--matcher", default="v6", choices=sorted(MATCHER_MODULES),
+                   help="which computeDisp implementation to load (default: v6 from computeDisp.py)")
     p.add_argument("--use-gt-depth", action="store_true",
-                   help="integrate TartanAir GT depth instead of v6 prediction "
+                   help="integrate TartanAir GT depth instead of the matcher prediction "
                         "(produces the pipeline upper-bound reference demo)")
     p.add_argument("--voxel", type=float, default=0.05,
                    help="TSDF voxel size in metres; TartanAir alleys are ~10-20 m wide "
@@ -83,6 +91,8 @@ def main() -> None:
     if not traj_dir.is_dir():
         raise SystemExit("[error] not a directory: {}".format(traj_dir))
 
+    computeDisp = importlib.import_module(MATCHER_MODULES[args.matcher]).computeDisp
+
     K = tartanair.get_intrinsics()
     fx = K[0, 0]
     baseline = tartanair.BASELINE_M
@@ -91,6 +101,7 @@ def main() -> None:
     print("[setup] {}/{}/{} frames {}..{} stride={}".format(
         args.scene, args.level, args.traj, args.start, args.end - 1, args.stride))
     print("[setup] fx={:.1f}  baseline={:.4f} m".format(fx, baseline))
+    print("[setup] matcher={} ({}.computeDisp)".format(args.matcher, MATCHER_MODULES[args.matcher]))
 
     frames = tartanair.list_frames(traj_dir, indices)
     poses = tartanair.load_poses(traj_dir, indices)
@@ -108,7 +119,7 @@ def main() -> None:
     if args.debug_disp_dir is not None:
         args.debug_disp_dir.mkdir(parents=True, exist_ok=True)
 
-    mode_label = "GT depth" if args.use_gt_depth else "v6 (max_disp={})".format(args.max_disp)
+    mode_label = "GT depth" if args.use_gt_depth else "{} (max_disp={})".format(args.matcher, args.max_disp)
     print("[run] integrating {} frames  mode={}".format(len(frames), mode_label))
     t0 = time.time()
     for k, (frame, T_world_cam) in enumerate(zip(tqdm(frames), poses)):
