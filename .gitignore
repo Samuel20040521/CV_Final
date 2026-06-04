@@ -16,6 +16,12 @@ __pycache__/
 /data/
 /out/
 
+# Bundle build output (produced by scripts/package_bonus.sh)
+/dist/
+
+# Vendored third-party source pulled at build time (large + has its own LICENSE)
+/third_party/
+
 # Local Claude Code session state (per-machine, not source)
 .claude/
 
@@ -36,6 +42,9 @@ __pycache__/
 *.synctex.gz
 *.xdv
 *.toc
+*.nav
+*.snm
+*.vrb
 
 # OS / editor
 .DS_Store

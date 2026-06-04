@@ -1,0 +1,89 @@
+# Build the bonus deliverable bundle for TA verification.
+#
+# Triggers:
+#   - workflow_dispatch  : manual run from the Actions tab; produces an
+#                          artifact only (90-day retention).
+#   - push tags 'bonus-v*' : tag-driven release. Produces the artifact AND
+#                          attaches the zip to a GitHub Release so the TA
+#                          can grab one URL.
+#
+# What the bundle contains and excludes is documented in
+# scripts/package_bonus.sh. This workflow just runs that script in a clean
+# Ubuntu runner so the artifact is reproducible.
+
+name: Package bonus deliverable
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_suffix:
+        description: 'Suffix for the artifact name (e.g. "v1", "draft"). Leave blank for a timestamp.'
+        required: false
+        default: ''
+      foundation_stereo_commit:
+        description: 'Pin FoundationStereo to a specific commit SHA (blank = main).'
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'bonus-v*'
+
+permissions:
+  contents: write  # for creating Releases on tag push
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute bundle name
+        id: meta
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            BUNDLE_NAME="bonus_bundle_${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.bundle_suffix }}" ]; then
+            BUNDLE_NAME="bonus_bundle_${{ inputs.bundle_suffix }}"
+          else
+            BUNDLE_NAME="bonus_bundle_$(date -u +%Y%m%d-%H%M%S)"
+          fi
+          echo "bundle_name=$BUNDLE_NAME" >> $GITHUB_OUTPUT
+          echo "[info] bundle name: $BUNDLE_NAME"
+
+      - name: Build bundle
+        env:
+          BUNDLE_NAME: ${{ steps.meta.outputs.bundle_name }}
+          FOUNDATION_STEREO_COMMIT: ${{ inputs.foundation_stereo_commit }}
+        run: bash scripts/package_bonus.sh
+
+      - name: Show bundle summary
+        run: |
+          ls -la dist/
+          echo "---top-level entries in the zip---"
+          unzip -l "dist/${{ steps.meta.outputs.bundle_name }}.zip" | head -25
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.bundle_name }}
+          path: dist/${{ steps.meta.outputs.bundle_name }}.zip
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Create release on tag
+        if: startsWith(github.ref, 'refs/tags/bonus-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ steps.meta.outputs.bundle_name }}.zip
+          generate_release_notes: true
+          body: |
+            Bonus deliverable bundle for NTU CV Spring 2026 final project.
+
+            **For the TA:** download `${{ steps.meta.outputs.bundle_name }}.zip`,
+            extract it, and follow the README.md inside. The README is a
+            standalone walk-through — you do not need to clone this repo.
+
+            All required pretrained model weights and the TartanAir dataset
+            are fetched by helper scripts at runtime; no HuggingFace account
+            or API token is required.
