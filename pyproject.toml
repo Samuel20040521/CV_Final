@@ -17,3 +17,20 @@ bonus = [
     "imageio[ffmpeg]",
     "scipy",
 ]
+# Deep stereo (FoundationStereo) inference stack.
+# torch/torchvision pins follow FoundationStereo's environment.yml so that
+# the released checkpoint loads without architecture drift. Heavy training
+# deps (imgaug, albumentations, scikit-image, scikit-learn) intentionally
+# omitted — we only do inference. xformers / flash-attn skipped because
+# the inference path doesn't reference them.
+deep = [
+    "torch==2.4.1",
+    "torchvision==0.19.1",
+    "timm",
+    "einops",
+    "omegaconf",
+    "huggingface-hub",
+    "gdown",       # for fetching the FoundationStereo weights folder
+    "joblib",      # imported by FoundationStereo's Utils.py
+    "trimesh",     # imported by FoundationStereo's Utils.py
+]

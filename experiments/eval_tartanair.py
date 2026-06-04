@@ -31,8 +31,17 @@ import numpy as np
 from tqdm import tqdm
 
 
-# Map --matcher choice to the module that exposes computeDisp.
-MATCHER_MODULES = {"v6": "computeDisp", "v8": "computeDisp_v8"}
+# Map --matcher choice to (kind, ref). ``classical`` matchers expose
+# ``computeDisp(Il, Ir, max_disp) -> uint8``. ``deep`` matchers go through
+# ``bonus.deep_matcher.compute_disparity_deep`` and return ``float32`` directly.
+MATCHER_KINDS = {
+    "v6":                ("classical", "computeDisp"),
+    "v8":                ("classical", "computeDisp_v8"),
+    # ViT-small (11-33-40) is downloadable from the official GDrive folder
+    # without quota issues; ViT-large (23-51-11) requires the HF mirror at
+    # huggingface.co/Felix-Zhenghao/FoundationStereo.
+    "foundation_stereo": ("deep",      "data/pretrained_models/foundation_stereo/11-33-40"),
+}
 
 
 # TartanAir intrinsics (constant for the whole dataset).
@@ -74,13 +83,28 @@ def main() -> None:
     p.add_argument("--end", default=100, type=int, help="last frame index (exclusive)")
     p.add_argument("--max-disp", default=64, type=int)
     p.add_argument("--threshold", default=1.0, type=float, help="disparity error threshold (pixels)")
-    p.add_argument("--matcher", default="v6", choices=sorted(MATCHER_MODULES),
-                   help="which computeDisp implementation to import (default: v6 from computeDisp.py)")
+    p.add_argument("--matcher", default="v6", choices=sorted(MATCHER_KINDS),
+                   help="stereo matcher to evaluate (v6/v8 = classical, foundation_stereo = NVlabs deep)")
+    p.add_argument("--matcher-ckpt-dir", type=Path, default=None,
+                   help="override deep matcher checkpoint dir (default per MATCHER_KINDS)")
+    p.add_argument("--matcher-iters", type=int, default=32,
+                   help="deep matcher refinement iterations (32 = paper default)")
     p.add_argument("--verbose", action="store_true", help="print per-frame BPR")
     args = p.parse_args()
 
-    computeDisp = importlib.import_module(MATCHER_MODULES[args.matcher]).computeDisp
-    print("[setup] matcher = {} ({}.computeDisp)".format(args.matcher, MATCHER_MODULES[args.matcher]))
+    matcher_kind, matcher_ref = MATCHER_KINDS[args.matcher]
+    if matcher_kind == "classical":
+        computeDisp = importlib.import_module(matcher_ref).computeDisp
+
+        def run_matcher(il, ir):
+            return computeDisp(il, ir, args.max_disp).astype(np.float32)
+    else:  # "deep"
+        from bonus import deep_matcher
+        ckpt_dir = args.matcher_ckpt_dir or Path(matcher_ref)
+
+        def run_matcher(il, ir):
+            return deep_matcher.compute_disparity_deep(il, ir, ckpt_dir, iters=args.matcher_iters)
+    print("[setup] matcher = {} ({}: {})".format(args.matcher, matcher_kind, matcher_ref))
 
     traj_dir = args.root / args.scene / args.level / args.traj
     if not traj_dir.is_dir():
@@ -100,7 +124,7 @@ def main() -> None:
         d_gt = fx_b / np.clip(depth, 1e-6, None)  # safe divide
 
         t0 = time.perf_counter()
-        d_pred = computeDisp(il, ir, args.max_disp)
+        d_pred = run_matcher(il, ir)
         dt = time.perf_counter() - t0
 
         valid = (depth < SKY_THRESHOLD) & (d_gt < args.max_disp)
@@ -122,7 +146,7 @@ def main() -> None:
     print("=" * 60)
     print("Scene:      {}/{}/{}  frames {}..{}".format(
         args.scene, args.level, args.traj, args.start, args.end - 1))
-    print("Matcher:    {} ({})".format(args.matcher, MATCHER_MODULES[args.matcher]))
+    print("Matcher:    {} ({}: {})".format(args.matcher, matcher_kind, matcher_ref))
     print("Settings:   max_disp={}  threshold={:.1f}px".format(args.max_disp, args.threshold))
     print("-" * 60)
     print("BPR  mean={:.2%}  median={:.2%}  worst={:.2%}  best={:.2%}".format(

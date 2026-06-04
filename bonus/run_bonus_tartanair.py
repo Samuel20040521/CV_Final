@@ -32,10 +32,19 @@ from . import render
 from . import tartanair
 
 
-# Map --matcher choice to the module that exposes computeDisp.
-# Keep v6 (committed at the repo root as computeDisp.py) as the default so the
-# bonus pipeline keeps reproducing the README baseline without flags.
-MATCHER_MODULES = {"v6": "computeDisp", "v8": "computeDisp_v8"}
+# Map --matcher choice to (kind, ref). ``kind`` chooses the calling convention;
+# ``ref`` is the importable module name for ``classical`` or the default
+# checkpoint dir for ``deep``. v6 stays the default so the bonus pipeline keeps
+# reproducing the README baseline without flags.
+MATCHER_KINDS = {
+    "v6":                ("classical", "computeDisp"),
+    "v8":                ("classical", "computeDisp_v8"),
+    # ViT-small (11-33-40) is downloadable from the official GDrive folder
+    # without quota issues; ViT-large (23-51-11) requires the HF mirror at
+    # huggingface.co/Felix-Zhenghao/FoundationStereo. Swap the default via
+    # --matcher-ckpt-dir to point at 23-51-11/ once that .pth is on disk.
+    "foundation_stereo": ("deep",      "data/pretrained_models/foundation_stereo/11-33-40"),
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,8 +58,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--stride", type=int, default=1)
     p.add_argument("--max-disp", type=int, default=64,
                    help="disparity search range; P000-style 'far' trajectories peak ~33")
-    p.add_argument("--matcher", default="v6", choices=sorted(MATCHER_MODULES),
-                   help="which computeDisp implementation to load (default: v6 from computeDisp.py)")
+    p.add_argument("--matcher", default="v6", choices=sorted(MATCHER_KINDS),
+                   help="stereo matcher to use. v6/v8 are classical (uint8); "
+                        "foundation_stereo loads NVlabs/FoundationStereo from third_party/ "
+                        "and returns float32 sub-pixel disparity.")
+    p.add_argument("--matcher-ckpt-dir", type=Path, default=None,
+                   help="override the deep matcher's checkpoint dir; "
+                        "default = data/pretrained_models/foundation_stereo/23-51-11")
+    p.add_argument("--matcher-iters", type=int, default=32,
+                   help="refinement iterations for the deep matcher (32 = paper default; 16 ~2x faster)")
     p.add_argument("--use-gt-depth", action="store_true",
                    help="integrate TartanAir GT depth instead of the matcher prediction "
                         "(produces the pipeline upper-bound reference demo)")
@@ -91,7 +107,21 @@ def main() -> None:
     if not traj_dir.is_dir():
         raise SystemExit("[error] not a directory: {}".format(traj_dir))
 
-    computeDisp = importlib.import_module(MATCHER_MODULES[args.matcher]).computeDisp
+    matcher_kind, matcher_ref = MATCHER_KINDS[args.matcher]
+    if matcher_kind == "classical":
+        computeDisp = importlib.import_module(matcher_ref).computeDisp
+
+        def run_matcher(Il_bgr, Ir_bgr):
+            # uint8 → float32 so the downstream code path is uniform.
+            return computeDisp(Il_bgr, Ir_bgr, args.max_disp).astype(np.float32)
+    else:  # "deep"
+        from . import deep_matcher
+        ckpt_dir = args.matcher_ckpt_dir or Path(matcher_ref)
+
+        def run_matcher(Il_bgr, Ir_bgr):
+            return deep_matcher.compute_disparity_deep(
+                Il_bgr, Ir_bgr, ckpt_dir, iters=args.matcher_iters,
+            )
 
     K = tartanair.get_intrinsics()
     fx = K[0, 0]
@@ -101,7 +131,7 @@ def main() -> None:
     print("[setup] {}/{}/{} frames {}..{} stride={}".format(
         args.scene, args.level, args.traj, args.start, args.end - 1, args.stride))
     print("[setup] fx={:.1f}  baseline={:.4f} m".format(fx, baseline))
-    print("[setup] matcher={} ({}.computeDisp)".format(args.matcher, MATCHER_MODULES[args.matcher]))
+    print("[setup] matcher={} ({}: {})".format(args.matcher, matcher_kind, matcher_ref))
 
     frames = tartanair.list_frames(traj_dir, indices)
     poses = tartanair.load_poses(traj_dir, indices)
@@ -119,7 +149,12 @@ def main() -> None:
     if args.debug_disp_dir is not None:
         args.debug_disp_dir.mkdir(parents=True, exist_ok=True)
 
-    mode_label = "GT depth" if args.use_gt_depth else "{} (max_disp={})".format(args.matcher, args.max_disp)
+    if args.use_gt_depth:
+        mode_label = "GT depth"
+    elif matcher_kind == "classical":
+        mode_label = "{} (max_disp={})".format(args.matcher, args.max_disp)
+    else:
+        mode_label = "{} (iters={})".format(args.matcher, args.matcher_iters)
     print("[run] integrating {} frames  mode={}".format(len(frames), mode_label))
     t0 = time.time()
     for k, (frame, T_world_cam) in enumerate(zip(tqdm(frames), poses)):
@@ -132,7 +167,7 @@ def main() -> None:
             depth = np.load(frame.depth_left)
         else:
             Ir = cv2.imread(str(frame.image_right))
-            disp = computeDisp(Il, Ir, args.max_disp).astype(np.float32)
+            disp = run_matcher(Il, Ir)
             depth = depth_mod.disparity_to_depth(disp, fx=fx, baseline=baseline)
             if args.debug_disp_dir is not None:
                 idx = args.start + k * args.stride
