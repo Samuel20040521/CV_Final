@@ -28,6 +28,9 @@ __pycache__/
 # Old / one-off archives at the repo root (not source)
 /Stereo_Matching.zip
 /*_final.zip
+# Bundles downloaded from GitHub Releases land at the repo root sometimes;
+# they're build output, not source.
+/bonus_bundle*.zip
 
 # LaTeX build artifacts (keep .tex / .bib / .pdf, drop intermediates)
 *.aux

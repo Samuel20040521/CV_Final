@@ -39,11 +39,23 @@ mkdir -p "$STAGE"
 # ---------------------------------------------------------------------------
 # 1. Source code the bonus pipeline depends on
 # ---------------------------------------------------------------------------
-echo "[copy] python source"
-cp "$REPO_ROOT/computeDisp.py"     "$STAGE/"
-cp "$REPO_ROOT/computeDisp_v8.py"  "$STAGE/"
+# The team's final classical implementation is v8. We ship it as the
+# bundle's canonical computeDisp.py — the TA only ever sees one classical
+# matcher (v8) and one SOTA deep matcher (FoundationStereo). v6 from the
+# team's repo is deliberately NOT shipped to keep the deliverable focused.
+echo "[copy] python source — computeDisp.py := v8, FoundationStereo for deep"
+cp "$REPO_ROOT/computeDisp_v8.py"  "$STAGE/computeDisp.py"
 cp -r "$REPO_ROOT/bonus"           "$STAGE/"
 cp -r "$REPO_ROOT/experiments"     "$STAGE/"
+
+# Drop the v6 entry from MATCHER_KINDS and remap v8 to the canonical
+# `computeDisp` module name the bundle ships. Done as a staging patch so the
+# team's source tree stays untouched and the dispatch tables stay simple.
+echo "[patch] simplify MATCHER_KINDS to {v8 (classical), foundation_stereo (deep)}"
+for f in "$STAGE/bonus/run_bonus_tartanair.py" "$STAGE/experiments/eval_tartanair.py"; do
+  sed -i '/^[[:space:]]*"v6":[[:space:]]*("classical"/d' "$f"
+  sed -i 's/("classical", "computeDisp_v8")/("classical", "computeDisp")/' "$f"
+done
 
 # ---------------------------------------------------------------------------
 # 2. Build / dependency manifests (uv preferred, pip fallback)

@@ -34,8 +34,15 @@ Valid-mask coverage mean=98.8%
 ============================================================
 ```
 
-For the full set of comparisons (v6 classical baseline + v8 + 3D walkthrough
-video), see [§4](#4-reproduce-bpr-numbers) and [§5](#5-reproduce-3d-walkthrough-mp4).
+For the classical baseline number and the 3D walkthrough video, see
+[§5](#5-reproduce-bpr-numbers) and [§6](#6-reproduce-the-3d-walkthrough-mp4).
+
+The bundle ships two matchers — that is all you need to verify:
+
+  * **classical** — `computeDisp.py` (the team's Census + WGIF + sub-pixel +
+    WMF implementation; selected via `--matcher v8`)
+  * **SOTA** — NVIDIA FoundationStereo wrapped in `bonus/deep_matcher.py`
+    (selected via `--matcher foundation_stereo`)
 
 ---
 
@@ -50,7 +57,7 @@ video), see [§4](#4-reproduce-bpr-numbers) and [§5](#5-reproduce-3d-walkthroug
 
 Tested on RTX 4090 (24 GB) + Ubuntu 24.04 + CUDA 12.6 + Python 3.11. The
 deep matcher (`foundation_stereo`) needs a CUDA GPU; the classical matchers
-(`v6`, `v8`) run on CPU only.
+(`v8`) runs on CPU only.
 
 ---
 
@@ -186,10 +193,10 @@ TartanAir's GT depth, after converting depth to GT disparity via
 `d = fx · B / Z`. Valid mask excludes sky (depth ≥ 65000) and pixels whose
 GT disparity exceeds `max_disp` (search-range bound).
 
-### 5.1 All three matchers, both thresholds
+### 5.1 Both matchers, both thresholds
 
 ```bash
-for m in v6 v8 foundation_stereo; do
+for m in v8 foundation_stereo; do
   echo "=== $m @1px ==="
   python -m experiments.eval_tartanair --matcher $m --end 100 --threshold 1.0 | tail -6
   echo "=== $m @3px ==="
@@ -201,15 +208,19 @@ done
 
 | Matcher | BPR @ 1 px | BPR @ 3 px | Time / frame |
 |---|---|---|---|
-| `v6` (classical, our basic-task submission) | **20.21%** | **10.75%** | 0.36 s (CPU) |
-| `v8` (classical + sub-pixel) | 20.26% | 10.75% | 0.34 s (CPU) |
-| `foundation_stereo` (NVIDIA ViT-small zero-shot) | **3.65%** | **1.23%** | 0.28 s (RTX 4090) |
+| `v8` — classical (`computeDisp.py`: Census + WGIF + sub-pixel + WMF) | **20.26%** | **10.75%** | 0.34 s (CPU) |
+| `foundation_stereo` — NVIDIA FoundationStereo ViT-small (zero-shot) | **3.65%** | **1.23%** | 0.28 s (RTX 4090) |
 
 Numbers were generated on RTX 4090 + Ubuntu 24.04 + CUDA 12.6. Classical
-times will vary with CPU; deep times will vary with GPU. **BPR numbers
+time will vary with CPU; deep time will vary with GPU. **BPR numbers
 should match to within ±0.1 percentage points** because the deep model is
-fully deterministic in eval mode and the classical matchers are
+fully deterministic in eval mode and the classical matcher is
 single-precision deterministic.
+
+The 16-percentage-point gap (`20.26%` → `3.65%` at 1\,px) is the headline
+result: classical hand-crafted features hit a structural ceiling on
+TartanAir's synthetic outdoor textures, and the deep zero-shot prior
+breaks through it.
 
 ---
 
@@ -221,7 +232,7 @@ trajectory.
 
 ```bash
 # Classical baseline
-python -m bonus.run_bonus_tartanair --matcher v6                --end 100 --out out/v6_demo.mp4
+python -m bonus.run_bonus_tartanair --matcher v8                --end 100 --out out/v8_demo.mp4
 
 # Deep SOTA (recommended)
 python -m bonus.run_bonus_tartanair --matcher foundation_stereo --end 100 --out out/fs_demo.mp4
@@ -236,7 +247,7 @@ mesh-quality proxy — cleaner mesh compresses smaller):
 
 | Run | mp4 size |
 |---|---|
-| `v6_demo.mp4` | ~5 MB |
+| `v8_demo.mp4` | ~5 MB |
 | `fs_demo.mp4` | **~2.7 MB** (close to the GT upper bound) |
 | `gt_demo.mp4` | ~2.3 MB |
 
@@ -270,14 +281,13 @@ Open any of them with VLC or `ffplay` to inspect.
 
 | File | Role |
 |---|---|
-| `computeDisp.py` | Classical Census + WGIF + WMF matcher (v6, basic-task entry point) |
-| `computeDisp_v8.py` | Same with sub-pixel refinement (v8) |
+| `computeDisp.py` | Classical Census + WGIF + sub-pixel + WMF matcher (this IS our team's v8 implementation, shipped here as the canonical classical baseline) |
 | `bonus/deep_matcher.py` | FoundationStereo wrapper; `compute_disparity_deep(Il, Ir, ckpt)` |
 | `bonus/tartanair.py` | TartanAir V1 loader + **NED→OpenCV pose conversion** |
 | `bonus/depth.py` | `Z = fx·B / d` |
 | `bonus/fusion.py` | Open3D ScalableTSDFVolume integrate + mesh extract |
 | `bonus/render.py` | Follow-trajectory mp4 renderer |
-| `bonus/run_bonus_tartanair.py` | The orchestrator; `--matcher {v6,v8,foundation_stereo}` |
+| `bonus/run_bonus_tartanair.py` | The orchestrator; `--matcher {v8,foundation_stereo}` |
 | `experiments/eval_tartanair.py` | BPR eval against GT depth |
 | `third_party/FoundationStereo/` | NVIDIA's released source (vendored under their LICENSE) |
 
