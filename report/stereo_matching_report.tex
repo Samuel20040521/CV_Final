@@ -92,6 +92,10 @@ TA 門檻內（\SI{3.25}{\percent}, \SI{0.34}{\percent}, \SI{10.00}{\percent},
 ，這是讓重建幾何正確的關鍵步驟。基準 BPR 在
 japanesealley/Hard/P000 前 100 frame 為 \SI{20.21}{\percent}（1\,px）
 與 \SI{10.75}{\percent}（3\,px），與相關文獻對古典立體匹配在合成資料集的數字相當。
+為確認此數字屬於演算法上限而非實作短板，我們以業界 SOTA 的
+\textbf{FoundationStereo}~\cite{Wen2025}（NVIDIA, CVPR 2025 Best Paper Nomination）
+接入同一 pipeline 對照，BPR 直接降至 \SI{3.65}{\percent}（1\,px），驗證古典方法
+確有結構性瓶頸、深度先驗才是突破關鍵。
 \end{abstract}
 
 % =====================================================================
@@ -450,6 +454,98 @@ stereo 的常見水準）。我們也試了 Easy levels 與 \texttt{office/Easy}
 \textbf{下游必須消費 float disparity}（例如直接拿 cost volume 做 fusion，
 或將 disparity 改回 \texttt{float32} 接口）。
 
+\subsection{與業界 SOTA Deep Stereo 之比較}
+\label{sec:bonus-sota}
+
+\paragraph{動機。} 古典 stereo 在 TartanAir 上 20\,\% 的 BPR 是\textbf{演算法本身的上限}
+還是\textbf{我們實作的短板}？要回答這個問題，最直接的方式是把同一 pipeline 接上業界
+SOTA 的深度立體匹配器並對照數字。本節呈現這個對照實驗。
+
+\paragraph{近年 SOTA 景觀（不深入原理）。} 2021 年以降的深度立體匹配演化
+可粗分為三條路線：
+\begin{itemize}[leftmargin=2em,itemsep=2pt]
+\item \textbf{Iterative GRU 系列}：RAFT-Stereo~\cite{Lipson2021} 以 ConvGRU 反覆精煉
+correlation pyramid 上的 disparity，是後續 iterative 方法的共同基礎。
+Selective-Stereo~\cite{Wang2024Selective} 在 GRU 中加入頻率自適應的 Selective
+Recurrent Unit (SRU)，2024 年起在 KITTI / Middlebury / ETH3D 多項公開
+leaderboard 取得已發表方法第一。
+\item \textbf{Geometry Encoding Volume 系列}：IGEV-Stereo~\cite{Xu2023} 把 cost-volume
+aggregation network (PSMNet 風格) 與 RAFT 的 iterative refinement 合體；後續
+IGEV++~\cite{Xu2025} 進一步引入 multi-range geometry encoding 以處理大 disparity 範圍。
+\item \textbf{Foundation Model 系列}：FoundationStereo~\cite{Wen2025} 是 NVIDIA
+在 CVPR 2025 的 \textbf{Best Paper Nomination}，主打 zero-shot generalization——以
+ViT backbone（搭配 DINOv2~\cite{Oquab2023} 的 monocular prior）加上 1\,M 對
+合成立體影像預訓練，在 Middlebury 等 benchmark 上達到 zero-shot 1.1\,\% BP-2
+（vs. 先前 zero-shot 最好的 7.5\,\%）。
+\end{itemize}
+
+\paragraph{選型理由。} 我們的核心需求是\textbf{在 TartanAir 上做 zero-shot 量化評估}
+（在 TartanAir 上 fine-tune 會喪失 BPR 數字的客觀性，等同直接擬合 test set）。
+盤點公開 checkpoint 後發現：RAFT-Stereo、IGEV、Selective-Stereo 三家僅釋出
+SceneFlow / KITTI / Middlebury 域內權重；唯有 FoundationStereo 因設計初衷
+就是 foundation model，公開了在 1\,M 合成資料訓練的 zero-shot checkpoint。
+最終選擇 \textbf{FoundationStereo ViT-small}（\texttt{11-33-40/model\_best\_bp2.pth}，
+本機 RTX 4090 + 24\,GB VRAM 上推論 \SI{0.28}{\second/frame}）。
+
+\paragraph{整合方式。} 在 \texttt{bonus/deep\_matcher.py} 包成
+\texttt{compute\_disparity\_deep(Il, Ir, ckpt)} $\to$ \texttt{np.float32 (H, W)} 簽名的
+wrapper；\texttt{bonus/run\_bonus\_tartanair.py} 新增 \texttt{--matcher foundation\_stereo}
+flag 走 deep 分支。\textbf{depth conversion、TSDF、render 三層完全沿用 v6 的程式碼路徑
+沒有任何改動}——三組 BPR 數字（v6 / v8 / FoundationStereo）落差完全來自 matcher
+本身、與下游無關。
+
+\paragraph{結果。} 在 §\ref{sec:bonus-bpr} 完全相同的 100 frame、
+\texttt{max\_disp$=64$} 設定下：
+
+\begin{table}[H]\centering
+\caption{\texttt{japanesealley/Hard/P000} 前 100 frame，相同 valid mask
+（排除 sky 與 $d_{\mathrm{gt}}>\max\!d$ 的像素）。FoundationStereo 為 zero-shot
+（沒有任何 TartanAir 微調）。}
+\label{tab:bonus-sota}
+\begin{tabular}{lcccc}
+  \toprule
+  Matcher & BPR @ 1\,px (mean) & BPR @ 3\,px (mean) & median @ 3\,px & time / frame \\
+  \midrule
+  v6 (classical, 我們的 basic 交付物)    & 20.21\,\% & 10.75\,\% & 10.18\,\% & \SI{0.36}{\second} (CPU) \\
+  v8 (classical + sub-pixel)             & 20.26\,\% & 10.75\,\% & 10.20\,\% & \SI{0.34}{\second} (CPU) \\
+  \textbf{FoundationStereo ViT-small}    & \textbf{3.65\,\%} & \textbf{1.23\,\%} & \textbf{0.91\,\%} & \SI{0.28}{\second} (RTX 4090) \\
+  \bottomrule
+\end{tabular}
+\end{table}
+
+FoundationStereo 把 1\,px BPR 從 20\,\% 砍到 3.65\,\%（\textbf{5.5$\times$ 改善}），
+3\,px median 已破 1\,\%。
+
+\begin{figure}[H]\centering
+  \begin{subfigure}[t]{0.48\linewidth}\centering
+    \includegraphics[width=\linewidth]{walkthrough_v6.png}
+    \caption{v6 古典 baseline 重建}\end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\linewidth}\centering
+    \includegraphics[width=\linewidth]{walkthrough_fs.png}
+    \caption{FoundationStereo 重建（zero-shot）}\end{subfigure}
+  \caption{frame 40 first-person walkthrough 對照。FoundationStereo 版本的牆面
+  更銳利、地面飄浮 outlier 顯著減少；mp4 H.264 壓縮後的大小也從 v6 的
+  \SI{5.1}{\mebi\byte} 降到 FoundationStereo 的 \SI{2.7}{\mebi\byte}（趨近
+  GT-depth 上限的 \SI{2.3}{\mebi\byte}），側面驗證 mesh 雜訊大幅下降。}
+  \label{fig:bonus-fs-walkthrough}
+\end{figure}
+
+\paragraph{結論：classical 上限與 deep prior 的角色。} 三個觀察：
+
+\begin{enumerate}[leftmargin=2em,itemsep=2pt]
+\item \textbf{v6 的 20\,\% BPR 屬演算法上限，非實作短板}：v8 加 sub-pixel 沒有
+顯著差別、FoundationStereo 直接掉到 3.65\,\%，這是分布外（synthetic outdoor）
+紋理上古典 hand-crafted feature 無法處理的結構性瓶頸。
+\item \textbf{Multi-view fusion 是 v6 仍可交付的關鍵}：即便 single-frame BPR 20\,\%，
+TSDF 平均掉非系統性 noise 後 mesh 在視覺上仍可辨識（見 §\ref{sec:bonus-results}）；
+這也對應到我們把 demonstration video 而非 BPR 數字當作 bonus 的核心交付。
+\item \textbf{深度先驗才是突破口}：FoundationStereo 的優勢來自 DINOv2 backbone
++ 1\,M 對合成資料訓練學到的 monocular prior，這在低紋理區域提供了 hand-crafted
+Census 沒有的訊號。對未來 work 的啟示是：要進一步提升 bonus pipeline 的重建品質，
+方向是接更強的 matcher 與調整下游 fusion（confidence-weighted TSDF）以充分利用
+deep matcher 的 sub-pixel 訊號，而非繼續打磨 classical 流程。
+\end{enumerate}
+
 % =====================================================================
 \section{討論與結論}
 % =====================================================================
@@ -466,6 +562,13 @@ results'' 要求；20.21\,\% 的 BPR 是\textbf{誠實的量化報告}——古�
 noise 抑制到視覺上可接受的水準。最關鍵的技術點是 NED $\to$ OpenCV pose
 轉換（式~\ref{eq:ned2cv}），未做時 mesh 會飄在空中。
 
+\paragraph{SOTA 對照延伸。} §\ref{sec:bonus-sota} 進一步以
+NVIDIA FoundationStereo~\cite{Wen2025}（CVPR 2025 Best Paper Nomination）
+zero-shot 同 pipeline 對照，把 1\,px BPR 從 20.21\,\% 降到 3.65\,\%，
+量化證實 v6 的數字是\textbf{古典演算法的結構性上限}而非實作問題；同時也說明
+本專案的下游模組（NED→CV pose 修正、TSDF fusion、follow-trajectory render）
+具備 matcher-agnostic 的設計，可平移到任意深度立體匹配器之上。
+
 \paragraph{Limitations.}
 (i) 合成紋理，移植到真實 KITTI 時 BPR 可能下降；
 (ii) 我們的 occlusion 處理止於 LRC，沒有 hole inpainting；
@@ -473,8 +576,10 @@ noise 抑制到視覺上可接受的水準。最關鍵的技術點是 NED $\to$ 
 
 \paragraph{Future Work.}
 更大尺度的 orbit overview render、引入 confidence 加權的 TSDF
-（reduce mesh noise）、以及把同學的 v8 sub-pixel 訊號直接送進 TSDF
-（修改 API 為 \texttt{float32}）以驗證 sub-pixel 對 fusion 品質的潛在貢獻。
+（reduce mesh noise）、以及把 v8 / FoundationStereo 的 sub-pixel float disparity
+直接送進 TSDF（取代目前 \texttt{uint8} 介面）以充分利用 deep matcher 的
+sub-pixel 訊號；長期則可試 Selective-Stereo~\cite{Wang2024Selective} /
+IGEV++~\cite{Xu2025} 等 SceneFlow 訓練版本在 TartanAir 上的 domain gap。
 
 \printbibliography
 
